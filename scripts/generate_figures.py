@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import tempfile
 import sys
 from datetime import datetime, timezone
@@ -15,6 +16,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FormatStrFormatter, MultipleLocator
+from PIL import Image
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,12 @@ OUTPUT_DIR = ROOT / "results/figures"
 PDF_PATH = OUTPUT_DIR / "primary_results_overview.pdf"
 PNG_PATH = OUTPUT_DIR / "primary_results_overview.png"
 FROZEN = ROOT / "results/frozen"
+FIGURE_CONTRACT_VERSION = "primary-results-overview-v1"
+FIGURE_SOURCE_FILES = (
+    FROZEN / "warning_inference.csv",
+    FROZEN / "allocation_metrics.csv",
+    FROZEN / "allocation_inference.csv",
+)
 
 WARNING_ORDER = [
     "xgboost_retrained_comparator",
@@ -66,6 +74,20 @@ ORANGE = "#D55E00"
 GRAY = "#7A7A7A"
 LIGHT_GRAY = "#D7D7D7"
 DARK = "#222222"
+
+
+def figure_source_sha256() -> str:
+    """Identify the exact frozen inputs and rendering contract for this figure."""
+
+    digest = hashlib.sha256()
+    digest.update(FIGURE_CONTRACT_VERSION.encode("utf-8"))
+    digest.update(b"\0")
+    for path in FIGURE_SOURCE_FILES:
+        digest.update(path.relative_to(ROOT).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
 
 
 def _ordered(frame, key: str, order: list[str]):
@@ -107,7 +129,7 @@ def _forest_plot(ax, frame, *, scale: float, color: str) -> None:
 def build_figure():
     import pandas as pd
 
-    warning = pd.read_csv(FROZEN / "warning_inference.csv")
+    warning = pd.read_csv(FROZEN / "warning_inference.csv", float_precision="round_trip")
     warning = warning[
         warning["slice_type"].eq("overall")
         & warning["metric"].eq("average_precision")
@@ -115,7 +137,7 @@ def build_figure():
     warning = _ordered(warning, "model_or_variant", WARNING_ORDER)
     warning["display_label"] = warning["model_or_variant"].map(MODEL_LABELS)
 
-    strategies = pd.read_csv(FROZEN / "allocation_metrics.csv")
+    strategies = pd.read_csv(FROZEN / "allocation_metrics.csv", float_precision="round_trip")
     strategies = strategies[
         strategies["analysis_type"].eq("strategy")
         & strategies["cost_scenario"].eq("base")
@@ -123,7 +145,7 @@ def build_figure():
     strategies = _ordered(strategies, "analysis_id", STRATEGY_ORDER)
     strategies["display_label"] = strategies["analysis_id"].map(STRATEGY_LABELS)
 
-    components = pd.read_csv(FROZEN / "allocation_inference.csv")
+    components = pd.read_csv(FROZEN / "allocation_inference.csv", float_precision="round_trip")
     components = components[
         components["slice_type"].eq("overall")
         & components["analysis_tier"].eq("parent_primary")
@@ -207,6 +229,7 @@ def build_figure():
 def render_outputs(pdf_path: Path, png_path: Path) -> None:
     figure = build_figure()
     fixed_date = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    source_sha256 = figure_source_sha256()
     try:
         figure.savefig(
             pdf_path,
@@ -216,7 +239,10 @@ def render_outputs(pdf_path: Path, png_path: Path) -> None:
                 "Title": "Primary full-framework result overview",
                 "Author": "DeepFirm Quant public figure generator",
                 "Subject": "Presentation of frozen security-disjoint and out-of-time results",
-                "Keywords": "warning, allocation, component analysis, frozen results",
+                "Keywords": (
+                    "warning, allocation, component analysis, frozen results; "
+                    f"source-sha256={source_sha256}; contract={FIGURE_CONTRACT_VERSION}"
+                ),
                 "CreationDate": fixed_date,
                 "ModDate": fixed_date,
             },
@@ -226,10 +252,56 @@ def render_outputs(pdf_path: Path, png_path: Path) -> None:
             dpi=300,
             bbox_inches="tight",
             pad_inches=0.03,
-            metadata={"Title": "Primary full-framework result overview", "Software": "matplotlib"},
+            metadata={
+                "Title": "Primary full-framework result overview",
+                "Software": "matplotlib",
+                "SourceHash": source_sha256,
+                "Contract": FIGURE_CONTRACT_VERSION,
+            },
         )
     finally:
         plt.close(figure)
+
+
+def output_pair_errors(pdf_path: Path, png_path: Path) -> list[str]:
+    """Validate portable output identity without comparing renderer-specific bytes."""
+
+    errors: list[str] = []
+    source_sha256 = figure_source_sha256()
+    if not pdf_path.is_file():
+        errors.append(pdf_path.name + " is missing")
+    else:
+        pdf = pdf_path.read_bytes()
+        required_pdf_tokens = (
+            b"%PDF",
+            b"/Title (Primary full-framework result overview)",
+            f"source-sha256={source_sha256}".encode("ascii"),
+            f"contract={FIGURE_CONTRACT_VERSION}".encode("ascii"),
+        )
+        if len(pdf) < 10_000 or not pdf.startswith(required_pdf_tokens[0]):
+            errors.append(pdf_path.name + " is not a readable public figure PDF")
+        elif any(token not in pdf for token in required_pdf_tokens[1:]):
+            errors.append(pdf_path.name + " has stale source metadata")
+
+    if not png_path.is_file():
+        errors.append(png_path.name + " is missing")
+    else:
+        try:
+            with Image.open(png_path) as image:
+                info = dict(image.info)
+                size = image.size
+                image.verify()
+            if size[0] < 1_500 or size[1] < 700:
+                errors.append(png_path.name + " has an unexpected canvas size")
+            if info.get("Title") != "Primary full-framework result overview":
+                errors.append(png_path.name + " has a stale title")
+            if info.get("SourceHash") != source_sha256:
+                errors.append(png_path.name + " has stale source metadata")
+            if info.get("Contract") != FIGURE_CONTRACT_VERSION:
+                errors.append(png_path.name + " has a stale rendering contract")
+        except (OSError, SyntaxError) as error:
+            errors.append(png_path.name + f" is not a readable PNG: {error}")
+    return errors
 
 
 def write_or_check(*, check: bool) -> None:
@@ -239,13 +311,12 @@ def write_or_check(*, check: bool) -> None:
             pdf = root / PDF_PATH.name
             png = root / PNG_PATH.name
             render_outputs(pdf, png)
-            stale = [
-                path.relative_to(ROOT).as_posix()
-                for path, candidate in ((PDF_PATH, pdf), (PNG_PATH, png))
-                if not path.is_file() or path.read_bytes() != candidate.read_bytes()
-            ]
-        if stale:
-            raise RuntimeError("generated figure is missing or stale: " + ", ".join(stale))
+            candidate_errors = output_pair_errors(pdf, png)
+        if candidate_errors:
+            raise RuntimeError("generated figure check failed: " + "; ".join(candidate_errors))
+        tracked_errors = output_pair_errors(PDF_PATH, PNG_PATH)
+        if tracked_errors:
+            raise RuntimeError("generated figure is missing or stale: " + "; ".join(tracked_errors))
         print("generated figures are current")
         return
 

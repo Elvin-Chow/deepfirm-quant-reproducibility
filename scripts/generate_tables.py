@@ -57,6 +57,7 @@ COMPONENT_LABELS = {
 
 COST_LABELS = {"low": "5 bp", "base": "12 bp", "high": "25 bp"}
 COST_ORDER = {"low": 0, "base": 1, "high": 2}
+NUMERIC_CHECK_ATOL = 1e-12
 
 
 def _require(condition: bool, message: str) -> None:
@@ -64,19 +65,25 @@ def _require(condition: bool, message: str) -> None:
         raise RuntimeError(message)
 
 
+def _read_csv(path: Path) -> pd.DataFrame:
+    """Read archived decimals with a platform-independent round-trip parser."""
+
+    return pd.read_csv(path, float_precision="round_trip")
+
+
 def derive_tables() -> dict[str, pd.DataFrame]:
     """Derive the four public tables without fitting, scoring, or networking."""
 
-    warning_metrics = pd.read_csv(FROZEN / "warning_metrics_overall.csv")
-    warning_inference = pd.read_csv(FROZEN / "warning_inference.csv")
-    allocation_metrics = pd.read_csv(FROZEN / "allocation_metrics.csv")
-    allocation_inference = pd.read_csv(FROZEN / "allocation_inference.csv")
-    snapshots = pd.read_csv(FROZEN / "input_snapshot_identities.csv")
-    deviations = pd.read_csv(FROZEN / "protocol_deviations.csv")
-    warning_predictions = pd.read_csv(FROZEN / "warning_predictions.csv.gz")
-    allocation_returns = pd.read_csv(FROZEN / "allocation_returns.csv.gz")
-    failures = pd.read_csv(FROZEN / "model_failures.csv")
-    skips = pd.read_csv(FROZEN / "skips.csv")
+    warning_metrics = _read_csv(FROZEN / "warning_metrics_overall.csv")
+    warning_inference = _read_csv(FROZEN / "warning_inference.csv")
+    allocation_metrics = _read_csv(FROZEN / "allocation_metrics.csv")
+    allocation_inference = _read_csv(FROZEN / "allocation_inference.csv")
+    snapshots = _read_csv(FROZEN / "input_snapshot_identities.csv")
+    deviations = _read_csv(FROZEN / "protocol_deviations.csv")
+    warning_predictions = _read_csv(FROZEN / "warning_predictions.csv.gz")
+    allocation_returns = _read_csv(FROZEN / "allocation_returns.csv.gz")
+    failures = _read_csv(FROZEN / "model_failures.csv")
+    skips = _read_csv(FROZEN / "skips.csv")
 
     warning_columns = [
         "roc_auc",
@@ -179,6 +186,26 @@ def csv_bytes(frame: pd.DataFrame) -> bytes:
     return handle.getvalue().encode("utf-8")
 
 
+def frames_semantically_equal(actual: pd.DataFrame, expected: pd.DataFrame) -> bool:
+    """Compare generated tables exactly except for sub-tolerance float parsing noise."""
+
+    if list(actual.columns) != list(expected.columns):
+        return False
+    try:
+        pd.testing.assert_frame_equal(
+            actual,
+            expected,
+            check_dtype=False,
+            check_exact=False,
+            rtol=0.0,
+            atol=NUMERIC_CHECK_ATOL,
+            check_like=False,
+        )
+    except AssertionError:
+        return False
+    return True
+
+
 def write_or_check(*, check: bool) -> None:
     tables = derive_tables()
     if not check:
@@ -188,7 +215,13 @@ def write_or_check(*, check: bool) -> None:
         path = OUTPUT_DIR / filename
         expected = csv_bytes(frame)
         if check:
-            if not path.is_file() or path.read_bytes() != expected:
+            if not path.is_file():
+                stale.append(path.relative_to(ROOT).as_posix())
+                continue
+            if path.read_bytes() == expected:
+                continue
+            actual_frame = _read_csv(path)
+            if not frames_semantically_equal(actual_frame, frame):
                 stale.append(path.relative_to(ROOT).as_posix())
         else:
             path.write_bytes(expected)
