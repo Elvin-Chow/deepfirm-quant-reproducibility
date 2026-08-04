@@ -1,0 +1,10 @@
+item,count,scope
+Input snapshot identities,10,10 portfolios; hashes and coverage metadata only
+Warning prediction rows,14616,accepted H1 plus 11 comparators
+Warning overall primary comparisons,33,11 comparators x 3 metrics
+Allocation strategy-cost rows,18,6 strategies x 3 costs
+Allocation component-cost rows,33,11 variants x 3 costs
+Allocation return rows,27030,gross and net paths retained
+Allocation parent-primary comparisons,8,4 variants x 2 metrics
+Model failures / evaluation skips,0,0 / 0
+Allowed / fatal deviations,395,395 / 0

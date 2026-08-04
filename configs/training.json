@@ -1,0 +1,51 @@
+{
+  "protocol_version": "role-separated-training-v1.1",
+  "status": "frozen",
+  "horizons": [1, 5],
+  "seed": 20260803,
+  "split": {
+    "train": 0.55,
+    "calibration": 0.15,
+    "validation": 0.20,
+    "final_test": 0.10,
+    "purge_observations": "at_least_horizon",
+    "embargo_observations": "at_least_horizon"
+  },
+  "label": {
+    "future_interval": "t_plus_1_through_t_plus_h",
+    "historical_quantile": 0.05,
+    "historical_window_max": 252,
+    "historical_window_min": 60,
+    "shift": 1,
+    "quantile_interpolation": "linear",
+    "event_operator": "strictly_less_than"
+  },
+  "model": {
+    "objective": "binary:logistic",
+    "candidate_count_per_horizon": 4,
+    "class_weight": "min(negative_rows / positive_rows, 20)",
+    "selection_role": "calibration",
+    "calibration_method": "isotonic"
+  },
+  "acceptance_gates": {
+    "minimum_validation_positive_events": 250,
+    "minimum_validation_roc_auc": 0.58,
+    "minimum_average_precision": "max(1.25 * base_rate, base_rate + 0.01)",
+    "maximum_calibrated_mean_gap_error": 0.10,
+    "final_test_used_for_acceptance": false
+  },
+  "artifacts": {
+    "accepted_h1": {
+      "path": "artifacts/crisis_warning/accepted/global_h1",
+      "source_bundle_sha256": "cdb25a3a9919c25fec196832275ca84dc110a9a2bd39b008a3884beb858b12d4",
+      "validation_status": "ok",
+      "final_test_status": "reported_after_validation_acceptance"
+    },
+    "failed_h5": {
+      "path": "artifacts/crisis_warning/failed/global_h5",
+      "source_bundle_sha256": "43991674a604c2eda67c20df57360f5de8ad63753aea8b9399acae5b6643ab2f",
+      "validation_status": "failed_roc_auc_gate",
+      "final_test_status": "not_opened"
+    }
+  }
+}

@@ -1,0 +1,110 @@
+protocol_version: allocation-and-cost-v1
+status: frozen
+
+rebalancing:
+  sessions: 21
+  information_cutoff: before_holding_start
+  terminal_segment: allow_shorter_final_holding_block
+
+black_litterman:
+  equilibrium_weights: inverse_volatility
+  covariance_estimator: ledoit_wolf
+  annualization_days: 252
+  eigenvalue_floor: 0.000001
+  risk_aversion: 2.5
+  tau: one_over_max_observations_or_60
+  view_leg_weights: equal_within_leg
+  uncertainty: idzorek_confidence_diagonal
+  uncertainty_floor: 0.000000000001
+  no_view_mode: prior_only_bl
+  solver: SLSQP
+  solver_ftol: 0.000000001
+  solver_maxiter: 1000
+
+allocation_view:
+  version: allocation-view-v1
+  source: trailing_cross_sectional_risk_adjusted_return
+  lookback_sessions: 63
+  minimum_observations: 40
+  leg_fraction: 0.34
+  minimum_leg_assets: 1
+  expected_return_clip: [-0.20, 0.20]
+  tie_break: ticker_ascending
+  confidence_floor: 0.20
+  confidence_ceiling: 0.80
+  warning_artifact_dependency: none
+
+smart_policy:
+  version: smart-policy-v1
+  stress_weights:
+    volatility: 0.24
+    drawdown: 0.20
+    correlation: 0.16
+    ml: 0.16
+    regime: 0.16
+    anomaly: 0.08
+  signal_confidence_floor: 0.35
+  signal_timing: each_rebalance_through_information_cutoff
+
+guard:
+  version: point-in-time-guard-v1
+  prefix_timing: completed_oos_history_through_information_cutoff
+  initial_prior_score: 50.0
+  initial_raw_score: 50.0
+  blend_weights:
+    raw: {prior: 0.0, raw: 1.0}
+    balanced: {prior: 0.5, raw: 0.5}
+    defensive: {prior: 0.4, raw: 0.6}
+  decision_log_required: true
+  future_injection_invariance_required: true
+
+investability:
+  position_rule: long_only_fully_invested
+  short_sales: prohibited
+  configured_position_cap: 0.40
+  position_cap_rule: max(configured_cap,1/n_assets)
+  max_trade_weight_per_asset: 0.10
+  max_one_way_turnover: 0.25
+  tradability_lookback_sessions: 63
+  minimum_history_observations: 40
+  maximum_missing_fraction: 0.0
+  untradable_action: hold_all_and_log
+  liquidity_interpretation: portfolio_weight_trade_cap_proxy_no_ADV_capacity_claim
+  infeasible_action: fail_closed_and_log_skip
+
+turnover:
+  reported_measure: sum_absolute_weight_changes
+  cost_base: one_way_turnover_equals_half_l1
+  pretrade_reference: drifted_end_of_previous_holding_weights
+  initial_reference: committed_manifest_weights
+
+execution_projection:
+  trigger: uniform_trade_scaling_leaves_position_cap_breach
+  primary: slsqp_l2_closest_target
+  feasibility_and_fallback: highs_l1_closest_target
+  constraints:
+    - long_only
+    - full_investment
+    - effective_position_cap
+    - per_asset_trade_cap
+    - one_way_turnover_cap
+
+cost_scenarios:
+  - scenario_id: low
+    primary: false
+    fee_bps: 0.0
+    quoted_spread_bps: 4.0
+    slippage_bps: 3.0
+    one_way_cost_bps: 5.0
+  - scenario_id: base
+    primary: true
+    fee_bps: 1.0
+    quoted_spread_bps: 10.0
+    slippage_bps: 6.0
+    one_way_cost_bps: 12.0
+  - scenario_id: high
+    primary: false
+    fee_bps: 5.0
+    quoted_spread_bps: 20.0
+    slippage_bps: 10.0
+    one_way_cost_bps: 25.0

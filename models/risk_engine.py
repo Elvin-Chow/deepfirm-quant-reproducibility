@@ -1,0 +1,876 @@
+"""Risk computation engine for log returns and Expected Shortfall."""
+
+from datetime import date
+from typing import List, Literal, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sklearn.covariance import LedoitWolf
+
+from data_pipeline import AlignmentError, DataFetcherError, DataQuality, MarketAligner, SmartFetcher
+from models.market_validation import (
+    MarketMode,
+    is_cn_ticker,
+    is_hk_ticker,
+    is_jp_ticker,
+    is_tw_ticker,
+)
+from models.request_validation import (
+    normalize_tickers,
+    validate_common_portfolio_contract,
+)
+
+
+class RiskEvaluationRequest(BaseModel):
+    """Request payload for risk evaluation."""
+
+    tickers: List[str] = Field(..., min_length=1)
+    start_date: date
+    end_date: date
+    confidence_level: float = Field(default=0.99, ge=0.9, le=0.999)
+    weights: List[float] = Field(default_factory=list)
+    api_key: Optional[str] = Field(default=None, description="Tiingo API key for failover")
+    allow_sandbox_data: bool = Field(default=False, description="Allow synthetic demo price fallback")
+    mc_paths: int = Field(default=10_000, ge=1_000, le=50_000, description="Number of Monte Carlo simulation paths")
+    capital: float = Field(default=1_000_000, gt=0, description="Total capital in base currency")
+    leverage: float = Field(default=1.0, gt=0, description="Overall leverage multiplier")
+    market: MarketMode = Field(default="us", description="Market mode")
+
+    @field_validator("tickers")
+    @classmethod
+    def validate_tickers(cls, tickers: List[str]) -> List[str]:
+        return normalize_tickers(tickers)
+
+    @field_validator("end_date")
+    @classmethod
+    def validate_date_range(cls, end_date: date, info) -> date:
+        start_date = info.data.get("start_date")
+        if start_date and end_date < start_date:
+            raise ValueError("end_date must be on or after start_date")
+        return end_date
+
+    @model_validator(mode="after")
+    def validate_market_contract(self) -> "RiskEvaluationRequest":
+        validate_common_portfolio_contract(self.tickers, self.market, self.weights)
+        return self
+
+
+class RiskEvaluationResult(BaseModel):
+    """Result of a risk evaluation."""
+
+    tickers: List[str]
+    historical_es: float
+    monte_carlo_es: float
+    confidence_level: float
+    sample_paths: List[List[float]] = Field(default_factory=list)
+    correlation_matrix: List[List[float]] = Field(default_factory=list)
+    source: str = Field(default="unknown", description="Data source used for prices")
+    source_detail: str = Field(default="unknown", description="Detailed price data provenance")
+    data_warnings: List[str] = Field(default_factory=list, description="Non-fatal data quality warnings")
+    data_quality: DataQuality = Field(default_factory=DataQuality, description="Unified data quality provenance")
+    absolute_loss_historical: float = Field(default=0.0, description="Absolute loss based on historical ES")
+    absolute_loss_monte_carlo: float = Field(default=0.0, description="Absolute loss based on Monte Carlo ES")
+    cumulative_returns: List[float] = Field(default_factory=list, description="Daily cumulative return series")
+    performance_dates: List[str] = Field(default_factory=list, description="Date labels for cumulative returns")
+    benchmark_symbol: str = Field(default="", description="Benchmark symbol for performance comparison")
+    benchmark_name: str = Field(default="", description="Benchmark display name")
+    benchmark_cumulative_returns: List[float] = Field(default_factory=list, description="Benchmark cumulative return series")
+    benchmark_performance_dates: List[str] = Field(default_factory=list, description="Date labels for benchmark cumulative returns")
+    benchmark_source: str = Field(default="", description="Benchmark data source")
+    benchmark_source_detail: str = Field(default="", description="Detailed benchmark data provenance")
+    risk_free_symbol: str = Field(default="", description="Risk-free proxy symbol")
+    risk_free_name: str = Field(default="", description="Risk-free proxy display name")
+    risk_free_cumulative_returns: List[float] = Field(default_factory=list, description="Risk-free cumulative return series")
+    risk_free_performance_dates: List[str] = Field(default_factory=list, description="Date labels for risk-free cumulative returns")
+    risk_free_source: str = Field(default="", description="Risk-free data source")
+    risk_free_source_detail: str = Field(default="", description="Detailed risk-free data provenance")
+    annualized_volatility: float = Field(default=0.0, description="Annualized volatility")
+    max_drawdown: float = Field(default=0.0, description="Maximum drawdown")
+    max_drawdown_date: str = Field(default="", description="Date of maximum drawdown")
+
+
+class RiskEngine:
+    """Compute log returns, historical ES, and Monte Carlo ES."""
+
+    CHINA_MIN_PRICE_OBSERVATIONS: int = 60
+    CHINA_MIN_BUSINESS_DAY_COVERAGE: float = 0.60
+    CHINA_FLAT_PRICE_RUN_WARNING_DAYS: int = 10
+    OPTIMIZATION_COVARIANCE_ESTIMATOR: str = "ledoit_wolf"
+    OPTIMIZATION_ANNUALIZATION_DAYS: float = 252.0
+    OPTIMIZATION_EIGENVALUE_FLOOR: float = 1e-6
+
+    def __init__(
+        self,
+        fetcher: SmartFetcher,
+        aligner: MarketAligner,
+    ) -> None:
+        self.fetcher = fetcher
+        self.aligner = aligner
+
+    @staticmethod
+    def compute_log_returns(price_df: pd.DataFrame) -> pd.DataFrame:
+        """Convert a price DataFrame into log returns and drop leading NaNs."""
+        log_returns = np.log(price_df / price_df.shift(1))
+        return log_returns.dropna()
+
+    @staticmethod
+    def sanitize_returns(returns_df: pd.DataFrame) -> pd.DataFrame:
+        """Return complete finite return rows suitable for numerical routines."""
+        if returns_df.empty:
+            raise ValueError("returns data is empty")
+
+        cleaned = returns_df.replace([np.inf, -np.inf], np.nan).dropna(how="any")
+        if cleaned.empty:
+            raise ValueError("returns data contains no complete finite rows")
+        return cleaned
+
+    MIN_OOS_DAYS: int = 30
+
+    @staticmethod
+    def split_returns(
+        returns_df: pd.DataFrame,
+        test_ratio: float,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+        """Split returns chronologically into in-sample and out-of-sample DataFrames."""
+        returns_df = RiskEngine.sanitize_returns(returns_df)
+        n_total = len(returns_df)
+        n_test = max(RiskEngine.MIN_OOS_DAYS, int(n_total * test_ratio))
+        n_train = n_total - n_test
+        if n_train < 2:
+            raise ValueError(
+                f"at least {RiskEngine.MIN_OOS_DAYS + 2} complete finite return observations are required for OOS backtest; "
+                f"got {n_total} days with test_ratio={test_ratio}. "
+                "Widen the date range or reduce test_ratio."
+            )
+        train_df = returns_df.iloc[:n_train]
+        test_df = returns_df.iloc[n_train:]
+        if test_df.empty:
+            raise ValueError("OOS test sample is empty")
+        return train_df, test_df
+
+    @staticmethod
+    def _normalize_weights(weights: Optional[List[float]], n_assets: int) -> np.ndarray:
+        """Return finite full-investment weights, falling back to equal weights."""
+        if n_assets <= 0:
+            raise ValueError("n_assets must be positive")
+
+        equal_weights = np.ones(n_assets, dtype=float) / n_assets
+        if weights is None or len(weights) != n_assets:
+            return equal_weights
+
+        weights_arr = np.asarray(weights, dtype=float)
+        weight_sum = float(weights_arr.sum())
+        if not np.isfinite(weights_arr).all() or abs(weight_sum) <= 1e-12:
+            return equal_weights
+        return weights_arr / weight_sum
+
+    @staticmethod
+    def historical_es(
+        returns_df: pd.DataFrame,
+        weights: np.ndarray,
+        confidence_level: float = 0.99,
+    ) -> float:
+        """Calculate Expected Shortfall via historical simulation."""
+        returns_df = RiskEngine.sanitize_returns(returns_df)
+        portfolio_returns = returns_df.to_numpy() @ weights
+        portfolio_returns = portfolio_returns[np.isfinite(portfolio_returns)]
+        if portfolio_returns.size == 0:
+            raise ValueError("portfolio returns contain no finite values")
+        var_threshold = np.percentile(
+            portfolio_returns,
+            (1.0 - confidence_level) * 100.0,
+        )
+        tail_returns = portfolio_returns[portfolio_returns <= var_threshold]
+        if tail_returns.size == 0:
+            return float(var_threshold)
+        return float(tail_returns.mean())
+
+    @staticmethod
+    def _ensure_psd(cov: np.ndarray) -> np.ndarray:
+        """Ensure covariance matrix is positive semi-definite."""
+        cov = np.asarray(cov, dtype=float)
+        if cov.ndim != 2 or cov.shape[0] != cov.shape[1]:
+            raise ValueError("covariance matrix must be square")
+        if not np.isfinite(cov).all():
+            raise ValueError("covariance matrix contains non-finite values")
+
+        cov = (cov + cov.T) / 2.0
+        eigenvalues, eigenvectors = np.linalg.eigh(cov)
+        eigenvalues = np.maximum(eigenvalues, RiskEngine.OPTIMIZATION_EIGENVALUE_FLOOR)
+        psd = eigenvectors @ np.diag(eigenvalues) @ eigenvectors.T
+        return (psd + psd.T) / 2.0
+
+    @staticmethod
+    def prepare_optimization_inputs(
+        returns_df: pd.DataFrame,
+        n_assets: int,
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        """Build finite prior returns and covariance inputs for optimization.
+
+        Returns annualized mean and covariance so the objective signal,
+        risk, and L2 penalty terms operate on the same scale.
+        """
+        returns_df = RiskEngine.sanitize_returns(returns_df)
+        if len(returns_df) < 2:
+            raise ValueError(
+                "at least 2 complete finite training observations are required for covariance estimation"
+            )
+        if returns_df.shape[1] != n_assets:
+            raise ValueError("returns data asset count does not match tickers")
+
+        trading_days = RiskEngine.OPTIMIZATION_ANNUALIZATION_DAYS
+        mean_vector = np.nan_to_num(
+            returns_df.mean().to_numpy(dtype=float),
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        ) * trading_days
+        cleaned = returns_df.replace([np.inf, -np.inf], np.nan).dropna()
+        if len(cleaned) < 2:
+            raise ValueError(
+                "at least 2 complete finite training observations are required for covariance estimation"
+            )
+        shrunk = LedoitWolf().fit(cleaned.to_numpy(dtype=float)).covariance_
+        cov_matrix = np.nan_to_num(
+            shrunk,
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        ) * trading_days
+        if mean_vector.shape != (n_assets,):
+            raise ValueError("prior return vector has invalid shape")
+        if cov_matrix.shape != (n_assets, n_assets):
+            raise ValueError("covariance matrix has invalid shape")
+        if not np.isfinite(mean_vector).all():
+            raise ValueError("prior return vector contains non-finite values")
+
+        cov_matrix = RiskEngine._ensure_psd(cov_matrix)
+        return mean_vector, cov_matrix
+
+    @staticmethod
+    def _portfolio_return_moments(
+        returns_df: pd.DataFrame,
+        weights: np.ndarray,
+    ) -> Tuple[float, float]:
+        """Estimate daily portfolio log-return mean and standard deviation."""
+        returns_df = RiskEngine.sanitize_returns(returns_df)
+
+        mean_vector = np.nan_to_num(
+            returns_df.mean().to_numpy(),
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+        cov_matrix = np.nan_to_num(
+            returns_df.cov().to_numpy(),
+            nan=0.0,
+            posinf=0.0,
+            neginf=0.0,
+        )
+        if not np.any(cov_matrix):
+            return float(weights @ mean_vector), 0.0
+
+        cov_matrix = RiskEngine._ensure_psd(cov_matrix)
+
+        portfolio_mean = float(weights @ mean_vector)
+        portfolio_variance = float(weights @ cov_matrix @ weights)
+        portfolio_std = float(np.sqrt(max(portfolio_variance, 0.0)))
+        return portfolio_mean, portfolio_std
+
+    @staticmethod
+    def monte_carlo_es(
+        returns_df: pd.DataFrame,
+        weights: np.ndarray,
+        confidence_level: float = 0.99,
+        n_simulations: int = 10_000,
+        random_seed: int = 42,
+    ) -> float:
+        """Calculate Expected Shortfall via Monte Carlo simulation."""
+        rng = np.random.default_rng(random_seed)
+        portfolio_mean, portfolio_std = RiskEngine._portfolio_return_moments(
+            returns_df,
+            weights,
+        )
+
+        if portfolio_std <= 1e-12:
+            portfolio_returns = np.full(n_simulations, portfolio_mean)
+        else:
+            portfolio_returns = rng.normal(
+                loc=portfolio_mean,
+                scale=portfolio_std,
+                size=n_simulations,
+            )
+
+        var_threshold = np.percentile(
+            portfolio_returns,
+            (1.0 - confidence_level) * 100.0,
+        )
+        tail_returns = portfolio_returns[portfolio_returns <= var_threshold]
+        if tail_returns.size == 0:
+            return float(var_threshold)
+        return float(tail_returns.mean())
+
+    @staticmethod
+    def generate_mc_paths(
+        returns_df: pd.DataFrame,
+        weights: np.ndarray,
+        n_simulations: int = 10_000,
+        random_seed: int = 42,
+    ) -> np.ndarray:
+        """Generate multi-day Monte Carlo portfolio price paths for visualization."""
+        returns_df = RiskEngine.sanitize_returns(returns_df)
+        rng = np.random.default_rng(random_seed)
+        n_days = len(returns_df)
+        n_sample_paths = min(100, n_simulations)
+        portfolio_mean, portfolio_std = RiskEngine._portfolio_return_moments(
+            returns_df,
+            weights,
+        )
+
+        if portfolio_std <= 1e-12:
+            portfolio_daily = np.full((n_sample_paths, n_days), portfolio_mean)
+        else:
+            portfolio_daily = rng.normal(
+                loc=portfolio_mean,
+                scale=portfolio_std,
+                size=(n_sample_paths, n_days),
+            )
+
+        cum_returns = np.cumsum(portfolio_daily, axis=1)
+        price_paths = 100.0 * np.exp(cum_returns)
+        return price_paths
+
+    @staticmethod
+    def compute_performance_metrics(
+        returns_df: pd.DataFrame,
+        weights: np.ndarray,
+        risk_free_rate: float = 0.02,
+    ) -> dict:
+        """Compute cumulative returns, annualized volatility, max drawdown, and ES."""
+        returns_df = RiskEngine.sanitize_returns(returns_df)
+        portfolio_returns = returns_df.to_numpy() @ weights
+        cumulative = np.exp(np.cumsum(portfolio_returns))
+        cum_returns = cumulative - 1.0
+        ann_vol = float(portfolio_returns.std() * np.sqrt(252))
+        ann_return = float(np.exp(portfolio_returns.mean() * 252) - 1.0)
+        sharpe = (ann_return - risk_free_rate) / ann_vol if ann_vol > 1e-12 else 0.0
+
+        running_max = np.maximum.accumulate(cumulative)
+        drawdown = (cumulative - running_max) / running_max
+        max_dd_idx = int(np.argmin(drawdown))
+        max_dd = float(drawdown[max_dd_idx])
+
+        try:
+            es = RiskEngine.historical_es(returns_df, weights)
+        except ValueError:
+            es = 0.0
+
+        return {
+            "cumulative_returns": cum_returns.tolist(),
+            "dates": returns_df.index.strftime("%Y-%m-%d").tolist(),
+            "annualized_volatility": ann_vol,
+            "annualized_return": ann_return,
+            "sharpe_ratio": sharpe,
+            "max_drawdown": max_dd,
+            "max_drawdown_date": str(returns_df.index[max_dd_idx].date()),
+            "expected_shortfall": float(es),
+        }
+
+    @staticmethod
+    def compute_information_ratio(
+        strategy_returns: np.ndarray,
+        benchmark_returns: np.ndarray,
+    ) -> float:
+        """Compute annualized Information Ratio from daily strategy and benchmark returns."""
+        excess = strategy_returns - benchmark_returns
+        if excess.std() < 1e-12:
+            return 0.0
+        return float(excess.mean() / excess.std() * np.sqrt(252))
+
+    @staticmethod
+    def calculate_model_score(
+        metrics: dict,
+        strategy_daily: Optional[np.ndarray] = None,
+        benchmark_daily: Optional[np.ndarray] = None,
+    ) -> dict:
+        """
+        Compute a 0-100 comprehensive model score and letter grade.
+
+        Composite weights:
+            profitability   0.35
+            risk_control    0.25
+            alpha_capability 0.20
+            win_rate        0.15
+            stability       0.05
+        Loss cap: when realized excess return is materially negative AND
+        cumulative strategy return is below zero, the score is capped at 50
+        (C grade) to penalize strategies that look stable while losing money.
+        """
+        sharpe = metrics.get("sharpe_ratio", 0.0)
+        max_dd = metrics.get("max_drawdown", 0.0)
+        ir = metrics.get("information_ratio", 0.0)
+        ann_vol = metrics.get("annualized_volatility", 0.0)
+        excess_return = metrics.get("excess_return", 0.0)
+        bench_vol = metrics.get("benchmark_annualized_volatility", ann_vol)
+        es = metrics.get("expected_shortfall", 0.0)
+
+        # 1. Profitability (Sharpe-based)
+        if sharpe >= 2.0:
+            profitability = 100.0
+        elif sharpe >= 1.0:
+            profitability = 70.0 + (sharpe - 1.0) * 30.0
+        elif sharpe >= 0.0:
+            profitability = 40.0 + sharpe * 30.0
+        elif sharpe >= -1.0:
+            profitability = 20.0 + (sharpe + 1.0) * 20.0
+        else:
+            profitability = max(0.0, 20.0 + (sharpe + 1.0) * 10.0)
+
+        # 2. Risk Control (Max Drawdown + Expected Shortfall blended)
+        if max_dd >= -0.05:
+            risk_control_dd = 100.0
+        elif max_dd >= -0.10:
+            risk_control_dd = 90.0 + (max_dd + 0.10) * 200.0
+        elif max_dd >= -0.20:
+            risk_control_dd = 70.0 + (max_dd + 0.20) * 200.0
+        elif max_dd >= -0.30:
+            risk_control_dd = 40.0 + (max_dd + 0.30) * 300.0
+        else:
+            risk_control_dd = max(0.0, 40.0 + (max_dd + 0.30) * 100.0)
+
+        if es >= -0.02:
+            risk_control_es = 100.0
+        elif es >= -0.05:
+            risk_control_es = 80.0 + (es + 0.05) * (20.0 / 0.03)
+        elif es >= -0.10:
+            risk_control_es = 60.0 + (es + 0.10) * (20.0 / 0.05)
+        elif es >= -0.15:
+            risk_control_es = 40.0 + (es + 0.15) * (20.0 / 0.05)
+        else:
+            risk_control_es = max(0.0, 40.0 + (es + 0.15) * (40.0 / 0.10))
+
+        risk_control = risk_control_dd * 0.60 + risk_control_es * 0.40
+
+        # 3. Alpha Capability (IR-based)
+        if ir >= 1.5:
+            alpha_cap = 100.0
+        elif ir >= 0.5:
+            alpha_cap = 60.0 + (ir - 0.5) * 40.0
+        elif ir >= 0.0:
+            alpha_cap = 40.0 + ir * 40.0
+        elif ir >= -0.5:
+            alpha_cap = 20.0 + (ir + 0.5) * 40.0
+        else:
+            alpha_cap = max(0.0, 20.0 + (ir + 0.5) * 20.0)
+
+        # 4. Stability (Relative volatility vs benchmark)
+        if bench_vol > 1e-12:
+            vol_ratio = ann_vol / bench_vol
+        else:
+            vol_ratio = 1.0
+
+        if vol_ratio <= 0.5:
+            stability = 100.0
+        elif vol_ratio <= 0.8:
+            stability = 80.0 + (0.8 - vol_ratio) * 66.67
+        elif vol_ratio <= 1.0:
+            stability = 60.0 + (1.0 - vol_ratio) * 100.0
+        elif vol_ratio <= 1.3:
+            stability = 40.0 + (1.3 - vol_ratio) * 66.67
+        else:
+            stability = max(0.0, 40.0 - (vol_ratio - 1.3) * 20.0)
+
+        # 5. Win Rate (True daily win rate when daily arrays provided, else fallback)
+        if strategy_daily is not None and benchmark_daily is not None:
+            valid_mask = np.isfinite(strategy_daily) & np.isfinite(benchmark_daily)
+            if valid_mask.sum() > 0:
+                win_rate = float(np.mean(strategy_daily[valid_mask] > benchmark_daily[valid_mask]) * 100.0)
+            else:
+                win_rate = 0.0
+        else:
+            win_rate = 100.0 if excess_return > 0 else max(0.0, 50.0 + excess_return * 500.0)
+
+        total_score = (
+            0.35 * profitability
+            + 0.25 * risk_control
+            + 0.20 * alpha_cap
+            + 0.15 * win_rate
+            + 0.05 * stability
+        )
+
+        cumulative = 0.0
+        if strategy_daily is not None:
+            arr = np.asarray(strategy_daily, dtype=float)
+            finite = arr[np.isfinite(arr)]
+            cumulative = float(np.exp(finite.sum()) - 1.0) if finite.size else 0.0
+        if excess_return < -0.03 and cumulative < 0.0:
+            total_score = min(total_score, 50.0)
+
+        total_score = round(float(total_score), 1)
+
+        if total_score >= 90:
+            grade = "S"
+        elif total_score >= 75:
+            grade = "A"
+        elif total_score >= 60:
+            grade = "B"
+        elif total_score >= 40:
+            grade = "C"
+        else:
+            grade = "D"
+
+        return {
+            "total_score": total_score,
+            "grade": grade,
+            "risk_control": round(float(risk_control), 1),
+            "profitability": round(float(profitability), 1),
+            "alpha_capability": round(float(alpha_cap), 1),
+            "stability": round(float(stability), 1),
+            "win_rate": round(float(win_rate), 1),
+        }
+
+    @staticmethod
+    def _is_cn_ticker(ticker: str) -> bool:
+        """Return whether a ticker uses the supported A-share format."""
+        return is_cn_ticker(str(ticker).strip())
+
+    @staticmethod
+    def _resolve_market(ticker: str) -> Literal["NYSE", "HKEX", "SSE", "JPX", "XTAI"]:
+        """Map ticker symbols to their primary exchange."""
+        clean_ticker = str(ticker).strip()
+        if is_hk_ticker(clean_ticker):
+            return "HKEX"
+        if is_cn_ticker(clean_ticker):
+            return "SSE"
+        if is_jp_ticker(clean_ticker):
+            return "JPX"
+        if is_tw_ticker(clean_ticker):
+            return "XTAI"
+        return "NYSE"
+
+    @staticmethod
+    def _append_fetcher_warning(fetcher: object, message: str) -> None:
+        """Attach one data warning to a fetcher-like object."""
+        append_warning = getattr(fetcher, "_append_warning", None)
+        if callable(append_warning):
+            append_warning(message)
+            return
+
+        warnings = getattr(fetcher, "data_warnings", None)
+        if isinstance(warnings, list) and message not in warnings:
+            warnings.append(message)
+
+    @staticmethod
+    def _max_flat_price_run(close_values: np.ndarray) -> int:
+        """Return the longest consecutive run of unchanged close prices."""
+        if close_values.size == 0:
+            return 0
+
+        longest = 1
+        current = 1
+        for idx in range(1, close_values.size):
+            if np.isclose(close_values[idx], close_values[idx - 1], rtol=0.0, atol=1e-12):
+                current += 1
+            else:
+                current = 1
+            longest = max(longest, current)
+        return longest
+
+    @classmethod
+    def _china_price_quality_warnings(
+        cls,
+        raw_df: pd.DataFrame,
+        normalized_df: pd.DataFrame,
+        ticker: str,
+        start_date: date,
+        end_date: date,
+    ) -> List[str]:
+        """Build non-fatal quality warnings for standalone A-share prices."""
+        warnings: List[str] = []
+        row_count = len(normalized_df)
+
+        if row_count < cls.CHINA_MIN_PRICE_OBSERVATIONS:
+            warnings.append(
+                f"{ticker}: China A-share price sample is short "
+                f"({row_count} observations); risk estimates may be unstable."
+            )
+
+        date_col = "日期" if "日期" in raw_df.columns else "Date" if "Date" in raw_df.columns else None
+        if date_col is not None:
+            raw_dates = pd.to_datetime(raw_df[date_col], errors="coerce")
+            valid_raw_dates = raw_dates.dropna().dt.normalize()
+            duplicate_rows = int(valid_raw_dates.duplicated(keep=False).sum())
+            if duplicate_rows > 0:
+                warnings.append(
+                    f"{ticker}: China A-share price data contained {duplicate_rows} "
+                    "duplicate date rows; the last close per date was used."
+                )
+
+        expected_days = pd.bdate_range(start_date, end_date)
+        if len(expected_days) >= 10:
+            observed_days = pd.DatetimeIndex(normalized_df["Date"])
+            covered_days = observed_days.intersection(expected_days)
+            coverage = len(covered_days) / len(expected_days)
+            if coverage < cls.CHINA_MIN_BUSINESS_DAY_COVERAGE:
+                warnings.append(
+                    f"{ticker}: China A-share price coverage is low "
+                    f"({coverage:.0%} of requested business days); results may be affected "
+                    "by missing prices or trading suspensions."
+                )
+
+        close_values = normalized_df["Close"].to_numpy(dtype=float)
+        flat_run = cls._max_flat_price_run(close_values)
+        if flat_run >= cls.CHINA_FLAT_PRICE_RUN_WARNING_DAYS:
+            warnings.append(
+                f"{ticker}: China A-share close price was unchanged for {flat_run} "
+                "consecutive observations; check for suspension or stale data."
+            )
+
+        return warnings
+
+    @staticmethod
+    def _normalize_china_price_frame(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
+        """Normalize AKShare A-share prices into Date and Close columns."""
+        if df.empty:
+            raise DataFetcherError(
+                message=f"empty dataframe returned from AKShare for {ticker}",
+                symbol=ticker,
+                source="china_equity",
+            )
+        if "日期" in df.columns:
+            date_col = "日期"
+        elif "Date" in df.columns:
+            date_col = "Date"
+        else:
+            raise DataFetcherError(
+                message=f"missing price date column for {ticker}",
+                symbol=ticker,
+                source="china_equity",
+            )
+
+        if "收盘" in df.columns:
+            close_col = "收盘"
+        elif "Close" in df.columns:
+            close_col = "Close"
+        else:
+            raise DataFetcherError(
+                message=f"missing price close column for {ticker}",
+                symbol=ticker,
+                source="china_equity",
+            )
+
+        dates = pd.to_datetime(df[date_col], errors="coerce")
+        close = pd.to_numeric(df[close_col], errors="coerce")
+        if dates.isna().any():
+            raise ValueError(f"unparseable price dates for {ticker}")
+        close_values = close.to_numpy(dtype=float)
+        if not np.isfinite(close_values).all():
+            raise ValueError(f"non-finite close prices for {ticker}")
+        if (close_values <= 0.0).any():
+            raise ValueError(f"non-positive close prices for {ticker}")
+
+        normalized = pd.DataFrame({"Date": dates.dt.tz_localize(None).dt.normalize(), "Close": close_values})
+        normalized = normalized.sort_values("Date")
+        normalized = normalized.drop_duplicates(subset=["Date"], keep="last")
+        if len(normalized) < 2:
+            raise ValueError(f"at least two valid price rows are required for {ticker}")
+        return normalized.reset_index(drop=True)
+
+    def _fetch_prices(
+        self,
+        tickers: List[str],
+        start_date: date,
+        end_date: date,
+        market_mode: str = "us",
+    ) -> pd.DataFrame:
+        """Fetch and align close prices for a list of tickers."""
+        series_list: List[pd.Series] = []
+        markets: List[str] = []
+
+        if market_mode == "cn":
+            for idx, ticker in enumerate(tickers):
+                if idx > 0:
+                    import time
+                    time.sleep(0.5)
+
+                clean_ticker = str(ticker).strip()
+                if not self._is_cn_ticker(clean_ticker):
+                    raise ValueError(
+                        f"CN market mode only accepts 6-digit A-share tickers: {clean_ticker}"
+                    )
+                response = self.fetcher.fetch_china_equity(
+                    clean_ticker,
+                    start_date,
+                    end_date,
+                )
+                df = self._normalize_china_price_frame(response.data, clean_ticker)
+                for warning in self._china_price_quality_warnings(
+                    response.data,
+                    df,
+                    clean_ticker,
+                    start_date,
+                    end_date,
+                ):
+                    self._append_fetcher_warning(self.fetcher, warning)
+                prices = pd.Series(
+                    df["Close"].values,
+                    index=pd.to_datetime(df["Date"].values),
+                    name=clean_ticker,
+                )
+                series_list.append(prices)
+                markets.append("SSE")
+
+            aligned = self.aligner.align_multiple(series_list, markets)
+            aligned.columns = tickers
+            return aligned
+
+        if market_mode == "jp":
+            non_jp_tickers = [
+                str(ticker).strip()
+                for ticker in tickers
+                if not is_jp_ticker(str(ticker).strip())
+            ]
+            if non_jp_tickers:
+                raise ValueError(
+                    "Japan market mode only accepts .T tickers: "
+                    + ", ".join(non_jp_tickers)
+                )
+
+        if market_mode == "tw":
+            non_tw_tickers = [
+                str(ticker).strip()
+                for ticker in tickers
+                if not is_tw_ticker(str(ticker).strip())
+            ]
+            if non_tw_tickers:
+                raise ValueError(
+                    "Taiwan market mode only accepts .TW or .TWO tickers: "
+                    + ", ".join(non_tw_tickers)
+                )
+
+        # Try batch download first to minimize HTTP requests and avoid rate limits
+        if len(tickers) > 1:
+            try:
+                batch_df = self.fetcher.fetch_equity_batch(
+                    tickers, start_date, end_date
+                )
+            except DataFetcherError:
+                batch_df = None
+
+            if batch_df is not None and not batch_df.empty:
+                for ticker in tickers:
+                    if ticker not in batch_df.columns.get_level_values(1).unique():
+                        continue
+                    close_col = ("Close", ticker)
+                    if close_col not in batch_df.columns:
+                        continue
+                    prices = pd.Series(
+                        batch_df[close_col].values,
+                        index=pd.to_datetime(batch_df.index.values),
+                        name=ticker,
+                    )
+                    series_list.append(prices)
+                    markets.append(self._resolve_market(ticker))
+
+                if len(series_list) == len(tickers):
+                    aligned = self.aligner.align_multiple(series_list, markets)
+                    aligned.columns = tickers
+                    return aligned
+
+        # Fallback to per-ticker fetch; _fetch_yf enforces 2s rate limits
+        for idx, ticker in enumerate(tickers):
+            if idx > 0:
+                import time
+                time.sleep(0.5)
+
+            market = self._resolve_market(ticker)
+            if market == "HKEX":
+                response = self.fetcher.fetch_hk_equity(ticker, start_date, end_date)
+            elif market == "JPX":
+                response = self.fetcher.fetch_jp_equity(ticker, start_date, end_date)
+            elif market == "XTAI":
+                response = self.fetcher.fetch_tw_equity(ticker, start_date, end_date)
+            else:
+                response = self.fetcher.fetch_us_equity(ticker, start_date, end_date)
+
+            df = response.data
+            if "Close" not in df.columns:
+                raise DataFetcherError(
+                    message=f"missing Close column for {ticker}",
+                    symbol=ticker,
+                    source="risk_engine",
+                )
+
+            date_col = "Date" if "Date" in df.columns else df.columns[0]
+            prices = pd.Series(
+                df["Close"].values,
+                index=pd.to_datetime(df[date_col].values),
+                name=ticker,
+            )
+            series_list.append(prices)
+            markets.append(market)
+
+        aligned = self.aligner.align_multiple(series_list, markets)
+        aligned.columns = tickers
+        return aligned
+
+    def evaluate(self, request: RiskEvaluationRequest) -> RiskEvaluationResult:
+        """Run the full risk evaluation pipeline."""
+        price_df = self._fetch_prices(
+            request.tickers,
+            request.start_date,
+            request.end_date,
+            market_mode=request.market,
+        )
+        return self.evaluate_from_prices(request, price_df)
+
+    def evaluate_from_prices(
+        self,
+        request: RiskEvaluationRequest,
+        price_df: pd.DataFrame,
+    ) -> RiskEvaluationResult:
+        """Run risk evaluation from an already aligned price DataFrame."""
+        returns_df = self.compute_log_returns(price_df)
+        returns_df = self.sanitize_returns(returns_df)
+
+        n_assets = len(request.tickers)
+        weights = self._normalize_weights(request.weights, n_assets)
+
+        hist_es = self.historical_es(returns_df, weights, request.confidence_level)
+        mc_es = self.monte_carlo_es(
+            returns_df, weights, request.confidence_level, n_simulations=request.mc_paths
+        )
+        paths = self.generate_mc_paths(
+            returns_df, weights, n_simulations=request.mc_paths
+        )
+        sample_paths = paths.tolist()
+
+        corr_matrix = returns_df.corr().to_numpy()
+        corr_matrix = np.nan_to_num(corr_matrix, nan=0.0, posinf=0.0, neginf=0.0)
+        np.fill_diagonal(corr_matrix, 1.0)
+
+        abs_loss_hist = request.capital * request.leverage * abs(hist_es)
+        abs_loss_mc = request.capital * request.leverage * abs(mc_es)
+
+        perf = self.compute_performance_metrics(returns_df, weights)
+
+        return RiskEvaluationResult(
+            tickers=request.tickers,
+            historical_es=hist_es,
+            monte_carlo_es=mc_es,
+            confidence_level=request.confidence_level,
+            sample_paths=sample_paths,
+            correlation_matrix=corr_matrix.tolist(),
+            source=self.fetcher.last_source,
+            source_detail=self.fetcher.last_source_detail,
+            data_warnings=list(self.fetcher.data_warnings),
+            data_quality=getattr(self.fetcher, "last_data_quality", DataQuality()),
+            absolute_loss_historical=abs_loss_hist,
+            absolute_loss_monte_carlo=abs_loss_mc,
+            cumulative_returns=perf["cumulative_returns"],
+            performance_dates=perf["dates"],
+            annualized_volatility=perf["annualized_volatility"],
+            max_drawdown=perf["max_drawdown"],
+            max_drawdown_date=perf["max_drawdown_date"],
+        )

@@ -1,0 +1,77 @@
+protocol_version: locked-full-framework-v1
+status: completed_frozen_do_not_repeat
+purpose: security_disjoint_and_out_of_time_full_framework_evaluation
+
+panel:
+  manifest: configs/portfolios.yaml
+  portfolio_count: 10
+  markets: [us, hk, cn, jp, tw]
+  portfolios_per_market: 2
+  accepted_h1_training_ticker_overlap_allowed: false
+
+dates:
+  context_start_inclusive: "2025-01-02"
+  decision_start_inclusive: "2026-05-18"
+  decision_end_inclusive: "2026-07-30"
+  outcome_end_inclusive: "2026-07-31"
+  provider_end_exclusive: "2026-08-01"
+
+warning:
+  horizon: 1
+  reference: accepted_h1_artifact
+  comparators:
+    - retrained_xgboost
+    - logistic_regression
+    - random_forest
+    - gradient_boosting
+    - historical_tail_threshold
+    - historical_var
+    - historical_es
+    - garch_1_1
+    - caviar_sav
+    - quantile_regression
+    - temporal_mlp
+  primary_metrics: [average_precision, brier_score, recall_at_frozen_threshold]
+  selected_threshold: 0.10074626865671642
+  legacy_threshold: 0.60
+
+allocation:
+  strategies:
+    - equal_weight
+    - inverse_volatility
+    - mean_variance
+    - prior_only_bl
+    - smart_policy
+    - smart_policy_oos_guard
+  primary_metrics: [net_mean_log_return, net_information_ratio]
+  component_config: configs/components.json
+  allocation_config: configs/allocation.yaml
+  cost_scenarios: [low, base, high]
+  primary_cost_scenario: base
+
+statistics:
+  config: configs/statistics.json
+  warning_block_sessions: 20
+  allocation_block_sessions: 21
+  bootstrap_replicates: 2000
+  randomization_replicates: 2000
+  primary_correction: Holm
+  sensitivity_correction: Benjamini-Hochberg
+
+provider_contract:
+  sandbox_data_allowed: false
+  synthetic_substitution_allowed: false
+  raw_snapshot_redistributed: false
+  same_index_fallback:
+    index_code: "000300"
+    minimum_overlap_returns: 250
+    minimum_return_correlation: 0.999
+    maximum_return_absolute_difference: 0.001
+    required_outcome_end: "2026-07-31"
+
+execution_boundary:
+  live_refresh_entry_in_release: false
+  retraining_entry_in_release: false
+  threshold_tuning_entry_in_release: false
+  final_evaluation_repeat_entry_in_release: false
+  archived_results_only: true

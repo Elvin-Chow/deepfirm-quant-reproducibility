@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this artifact, cite the associated manuscript."
+title: "DeepFirm-Quant Reproducibility Artifact"
+version: 1.0.0
+date-released: 2026-08-04
+type: software
+authors:
+  - family-names: Zhou
+    given-names: Hongyi
+repository-code: "https://github.com/Elvin-Chow/deepfirm-quant-reproducibility"
+license: MIT
+preferred-citation:
+  type: article
+  title: "An Auditable Explainable AI Framework for Multi-Market Tail-Risk Warning and Leakage-Guarded Bayesian Portfolio Allocation"
+  authors:
+    - family-names: Zhou
+      given-names: Hongyi
+  year: 2026

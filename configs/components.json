@@ -1,0 +1,31 @@
+{
+  "protocol_version": "component-ablation-v1",
+  "status": "frozen",
+  "reference_variant": "full_stack",
+  "evaluation_unit": "same_portfolio_same_rebalance_same_holding_dates",
+  "fixed_invariants": [
+    "data_rows_and_dates",
+    "portfolio_and_benchmark",
+    "rebalance_schedule_and_information_cutoffs",
+    "inverse_volatility_equilibrium_prior",
+    "ledoit_wolf_covariance_and_tau",
+    "risk_aversion_and_solver",
+    "long_only_full_investment_constraints",
+    "model_score_formula_and_prefix_rows",
+    "cost_scenarios",
+    "metric_implementation_and_output_schema"
+  ],
+  "variants": [
+    {"variant_id": "full_stack", "analysis_tier": "reference", "changed_component": "none", "override": {}},
+    {"variant_id": "without_model_view", "analysis_tier": "parent_primary", "changed_component": "model_view", "override": {"model_view": "removed"}},
+    {"variant_id": "fixed_view_uncertainty", "analysis_tier": "parent_primary", "changed_component": "view_uncertainty", "override": {"view_confidence": 0.50}},
+    {"variant_id": "fixed_smart_policy", "analysis_tier": "parent_primary", "changed_component": "smart_adaptive_rule", "override": {"smart_all_controls": "base_config"}},
+    {"variant_id": "guard_disabled", "analysis_tier": "parent_primary", "changed_component": "guard_blending", "override": {"guard": "disabled_after_same_prefix_scoring"}},
+    {"variant_id": "risk_inputs_neutralized", "analysis_tier": "smart_decomposition", "changed_component": "risk_input_block", "override": {"risk_input_block": 0.0}},
+    {"variant_id": "regime_input_neutralized", "analysis_tier": "smart_decomposition", "changed_component": "regime_input", "override": {"regime_input": 0.0}},
+    {"variant_id": "anomaly_input_neutralized", "analysis_tier": "smart_decomposition", "changed_component": "anomaly_input", "override": {"anomaly_input": 0.0}},
+    {"variant_id": "fixed_weight_bounds", "analysis_tier": "smart_decomposition", "changed_component": "weight_bounds", "override": {"weight_bounds": "base_config"}},
+    {"variant_id": "fixed_turnover_penalty", "analysis_tier": "smart_decomposition", "changed_component": "turnover_penalty", "override": {"turnover_penalty": "base_config"}},
+    {"variant_id": "fixed_concentration_penalty", "analysis_tier": "smart_decomposition", "changed_component": "concentration_penalty", "override": {"concentration_penalty": "base_config"}}
+  ]
+}

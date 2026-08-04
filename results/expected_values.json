@@ -1,0 +1,58 @@
+{
+  "schema_version": "public-release-expected-values-v1",
+  "row_counts": {
+    "results/frozen/warning_predictions.csv.gz": 14616,
+    "results/frozen/warning_metrics_overall.csv": 28,
+    "results/frozen/warning_inference.csv": 363,
+    "results/frozen/allocation_returns.csv.gz": 27030,
+    "results/frozen/allocation_decisions.csv.gz": 510,
+    "results/frozen/cost_ledger.csv.gz": 1530,
+    "results/frozen/allocation_metrics.csv": 51,
+    "results/frozen/allocation_inference.csv": 220,
+    "results/frozen/protocol_deviations.csv": 395,
+    "results/frozen/model_failures.csv": 0,
+    "results/frozen/skips.csv": 0
+  },
+  "accepted_h1_primary": {
+    "row_count": 522,
+    "positive_event_count": 50,
+    "roc_auc": 0.5663559322033898,
+    "average_precision": 0.1240928788366552,
+    "brier_score": 0.0875902302230329,
+    "recall_at_cost_threshold": 0.08,
+    "flag_rate_at_cost_threshold": 0.0670498084291187,
+    "recall_at_legacy_0_60": 0.0,
+    "top_decile_lift": 1.3788679245283018
+  },
+  "gradient_boosting_five_seed_mean": {
+    "repeat_count": 5,
+    "average_precision": 0.1291171240988529,
+    "recall_at_cost_threshold": 0.176
+  },
+  "guarded_smart_base_cost": {
+    "net_mean_log_return": 0.0010326549651555,
+    "net_information_ratio": 0.8350297860352704,
+    "mean_one_way_turnover": 0.1203917835966762,
+    "realized_cost": 0.0043341042094803
+  },
+  "failed_h5": {
+    "validation_roc_auc": 0.55976762723814,
+    "minimum_roc_auc_gate": 0.58,
+    "final_test_status": "not_opened_validation_gate_failed"
+  },
+  "deviations": {
+    "total": 395,
+    "fatal": 0,
+    "provider_fallbacks": 4,
+    "same_index_completeness_fallbacks": 2,
+    "model_convergence_warnings": 5,
+    "not_estimable_slices": 384
+  },
+  "claim_checks": {
+    "overall_warning_holm_significant": 0,
+    "parent_component_holm_significant": 0,
+    "model_failures": 0,
+    "evaluation_skips": 0
+  },
+  "numeric_absolute_tolerance": 1e-12
+}

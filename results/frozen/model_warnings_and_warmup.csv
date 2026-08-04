@@ -1,0 +1,16 @@
+model,repeat_id,seed,warning_category,warning,is_convergence_warning,portfolio_key,raw_return_rows,warmup_rows,finite_forecast_rows,fallback_rows,note
+temporal_mlp,1,20260803,ConvergenceWarning,Stochastic Optimizer: Maximum iterations (40) reached and the optimization hasn't converged yet.,True,,,,,,
+temporal_mlp,2,20260804,ConvergenceWarning,Stochastic Optimizer: Maximum iterations (40) reached and the optimization hasn't converged yet.,True,,,,,,
+temporal_mlp,3,20260805,ConvergenceWarning,Stochastic Optimizer: Maximum iterations (40) reached and the optimization hasn't converged yet.,True,,,,,,
+temporal_mlp,4,20260806,ConvergenceWarning,Stochastic Optimizer: Maximum iterations (40) reached and the optimization hasn't converged yet.,True,,,,,,
+temporal_mlp,5,20260807,ConvergenceWarning,Stochastic Optimizer: Maximum iterations (40) reached and the optimization hasn't converged yet.,True,,,,,,
+historical_var|historical_es,,,,,,cn|cn_consumption_resource_zero_overlap,381,60,321,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,cn|cn_state_resource_zero_overlap,381,60,321,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,hk|hk_cross_asset_zero_overlap,386,60,326,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,hk|hk_insurance_industrial_zero_overlap,386,60,326,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,jp|jp_etf_style_zero_overlap,383,60,323,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,jp|jp_financial_domestic_zero_overlap,383,60,323,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,tw|tw_income_factor_zero_overlap,381,60,321,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,tw|tw_supply_chain_zero_overlap,381,60,321,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,us|us_defensive_income_zero_overlap,394,60,334,0,shifted point-in-time rolling history; no future rows
+historical_var|historical_es,,,,,,us|us_midcap_sector_zero_overlap,394,60,334,0,shifted point-in-time rolling history; no future rows

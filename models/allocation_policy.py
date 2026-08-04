@@ -1,0 +1,505 @@
+"""Adaptive allocation parameter policy for portfolio optimization.
+
+The Smart-policy contract keeps every Smart-policy constant in one executable surface.
+Paper experiment configs mirror these values and fail closed if they drift.
+"""
+
+from copy import deepcopy
+from typing import Any, Dict, List, Literal, Optional
+
+import numpy as np
+import pandas as pd
+from pydantic import BaseModel, Field
+
+from models.anomaly_detector import RiskAnomalyDetector, RiskAnomalyResult
+from models.ml_risk_engine import MLRiskEngine, MLRiskForecastResult
+from models.regime_detector import MarketRegimeDetector, MarketRegimeResult
+from models.risk_engine import RiskEngine
+
+
+AllocationMode = Literal["smart", "professional"]
+
+
+class AllocationPolicyResult(BaseModel):
+    """Effective allocation controls used by the optimizer."""
+
+    mode: AllocationMode
+    policy_version: str = Field(default="smart-policy-v1")
+    max_weight: float = Field(gt=0.0, le=1.0)
+    min_weight: float = Field(ge=0.0, le=0.20)
+    turnover_penalty: float = Field(ge=0.0, le=20.0)
+    concentration_penalty: float = Field(ge=0.0, le=20.0)
+    confidence: float = Field(ge=0.0, le=1.0)
+    reasons: List[str] = Field(default_factory=list)
+    risk_level: str = Field(default="")
+    regime: str = Field(default="")
+    anomaly_level: str = Field(default="")
+    anomaly_impact: str = Field(default="")
+    annualized_volatility: float = Field(default=0.0)
+    max_drawdown: float = Field(default=0.0)
+    average_correlation: float = Field(default=0.0)
+    policy_asof: str = Field(default="", description="Date used to resolve allocation policy controls (YYYY-MM-DD)")
+    oos_leakage_guard: bool = Field(default=False, description="Whether OOS point-in-time signal validation was enforced")
+    ml_asof: str = Field(default="", description="Date of the ML forecast observation window (YYYY-MM-DD)")
+    ml_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    regime_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    anomaly_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    regime_asof: str = Field(default="", description="Date of the regime signal window (YYYY-MM-DD)")
+    anomaly_asof: str = Field(default="", description="Date of the anomaly signal window (YYYY-MM-DD)")
+    stress_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    volatility_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    drawdown_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    correlation_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    concentration_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    ml_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    regime_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    anomaly_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    stress_component_weights: Dict[str, float] = Field(default_factory=dict)
+    optimizer_turnover_penalty: float = Field(default=0.0, ge=0.0, le=20.0)
+    optimizer_concentration_penalty: float = Field(default=0.0, ge=0.0, le=20.0)
+
+
+class AllocationPolicyEngine:
+    """Derive optimizer controls from portfolio risk state."""
+
+    default_max_weight = 0.40
+    default_min_weight = 0.02
+    default_turnover_penalty = 0.005
+    default_concentration_penalty = 0.005
+    POLICY_VERSION = "smart-policy-v1"
+    SMART_PROTOCOL: Dict[str, Any] = {
+        "version": POLICY_VERSION,
+        "signal_timing": "each_rebalance_from_prices_through_information_cutoff",
+        "normalization": {
+            "volatility_denominator": 0.35,
+            "drawdown_denominator": 0.30,
+            "correlation_floor": 0.20,
+            "correlation_span": 0.60,
+            "component_clip": [0.0, 1.0],
+        },
+        "stress_weights": {
+            "volatility": 0.24,
+            "drawdown": 0.20,
+            "correlation": 0.16,
+            "ml": 0.16,
+            "regime": 0.16,
+            "anomaly": 0.08,
+        },
+        "regime_base_scores": {
+            "Normal": 0.15,
+            "High Volatility": 0.65,
+            "Crisis": 0.90,
+        },
+        "anomaly_impact_boosts": {
+            "none": 0.0,
+            "tighten_constraints": 0.10,
+            "freeze_rebalance": 0.20,
+            "force_oos_guard": 0.25,
+        },
+        "signal_confidence_floor": 0.35,
+        "diagnostic_thresholds": {
+            "annualized_volatility": 0.25,
+            "max_drawdown": -0.15,
+            "average_correlation": 0.65,
+            "concentration": 0.35,
+        },
+        "controls": {
+            "max_weight_three_plus": "clip(0.55-0.25*S-0.05*C,1/n,1)",
+            "max_weight_two": "clip(0.78-0.20*S-0.05*C,1/n,0.85)",
+            "min_weight": "clip(0.01+0.035*S,0,min(0.20,0.5/n))",
+            "turnover_penalty": "clip(0.003+0.030*S+0.010*D,0,0.05)",
+            "concentration_penalty": "clip(0.004+0.035*S+0.010*Rho,0,0.05)",
+        },
+    }
+
+    @classmethod
+    def protocol(cls) -> Dict[str, Any]:
+        """Return a detached copy of the frozen Smart-policy contract."""
+        return deepcopy(cls.SMART_PROTOCOL)
+
+    @staticmethod
+    def _clamp(value: float, low: float, high: float) -> float:
+        return float(min(max(value, low), high))
+
+    @staticmethod
+    def _average_pairwise_correlation(returns_df: pd.DataFrame) -> float:
+        if returns_df.shape[1] < 2:
+            return 0.0
+        corr = returns_df.corr().replace([np.inf, -np.inf], np.nan).to_numpy(dtype=float)
+        upper = corr[np.triu_indices(corr.shape[0], k=1)]
+        upper = upper[np.isfinite(upper)]
+        if upper.size == 0:
+            return 0.0
+        return float(upper.mean())
+
+    @staticmethod
+    def _fallback(
+        mode: AllocationMode,
+        max_weight: float,
+        min_weight: float,
+        turnover_penalty: float,
+        concentration_penalty: float,
+        reason: str,
+        policy_asof: str = "",
+        oos_leakage_guard: bool = False,
+    ) -> AllocationPolicyResult:
+        return AllocationPolicyResult(
+            mode=mode,
+            policy_version=AllocationPolicyEngine.POLICY_VERSION,
+            max_weight=max_weight,
+            min_weight=min_weight,
+            turnover_penalty=turnover_penalty,
+            concentration_penalty=concentration_penalty,
+            confidence=0.35,
+            reasons=[reason],
+            policy_asof=policy_asof,
+            oos_leakage_guard=oos_leakage_guard,
+        )
+
+    @staticmethod
+    def _date_label(value: Optional[str]) -> str:
+        if not value:
+            return ""
+        ts = pd.to_datetime(value, errors="coerce")
+        if pd.isna(ts):
+            return ""
+        if ts.tzinfo is not None:
+            ts = ts.tz_localize(None)
+        return ts.date().isoformat()
+
+    @classmethod
+    def _diagnostic_asof(cls, result: object) -> str:
+        diagnostics = getattr(result, "diagnostics", None)
+        return cls._date_label(getattr(diagnostics, "asof_date", ""))
+
+    @classmethod
+    def _validate_signal_asof(
+        cls,
+        name: str,
+        result: object,
+        train_asof: str,
+    ) -> str:
+        signal_asof = cls._diagnostic_asof(result)
+        if not signal_asof:
+            raise ValueError(f"回测完整性错误: {name} signal is missing diagnostics.asof_date")
+        signal_ts = pd.Timestamp(signal_asof)
+        train_ts = pd.Timestamp(train_asof)
+        if signal_ts > train_ts:
+            raise ValueError(
+                f"回测完整性错误: {name} signal asof {signal_asof} exceeds train_asof {train_asof}"
+            )
+        return signal_asof
+
+    @classmethod
+    def resolve_from_prices(
+        cls,
+        tickers: List[str],
+        price_df: pd.DataFrame,
+        weights: List[float],
+        mode: AllocationMode,
+        requested_max_weight: float,
+        requested_min_weight: float,
+        requested_turnover_penalty: float,
+        requested_concentration_penalty: float,
+        asof_date: Optional[str] = None,
+        ml_result: Optional[MLRiskForecastResult] = None,
+        regime_result: Optional[MarketRegimeResult] = None,
+        anomaly_result: Optional[RiskAnomalyResult] = None,
+        oos_leakage_guard: bool = False,
+    ) -> AllocationPolicyResult:
+        """Resolve effective optimizer controls for the current request."""
+        policy_asof = cls._date_label(asof_date)
+        if oos_leakage_guard and not policy_asof:
+            raise ValueError("回测完整性错误: train_asof is required for allocation policy")
+        prevalidated_ml_asof = ""
+        prevalidated_regime_asof = ""
+        prevalidated_anomaly_asof = ""
+        if oos_leakage_guard and policy_asof:
+            if ml_result is not None:
+                prevalidated_ml_asof = cls._validate_signal_asof("ml", ml_result, policy_asof)
+            if regime_result is not None:
+                prevalidated_regime_asof = cls._validate_signal_asof(
+                    "regime", regime_result, policy_asof
+                )
+            if anomaly_result is not None:
+                prevalidated_anomaly_asof = cls._validate_signal_asof(
+                    "anomaly", anomaly_result, policy_asof
+                )
+
+        if mode == "professional":
+            return AllocationPolicyResult(
+                mode="professional",
+                policy_version=cls.POLICY_VERSION,
+                max_weight=requested_max_weight,
+                min_weight=requested_min_weight,
+                turnover_penalty=requested_turnover_penalty,
+                concentration_penalty=requested_concentration_penalty,
+                confidence=1.0,
+                reasons=["Professional mode uses manual allocation controls."],
+                policy_asof=policy_asof,
+                oos_leakage_guard=oos_leakage_guard,
+            )
+
+        n_assets = len(tickers)
+        if n_assets <= 0:
+            return cls._fallback(
+                "smart",
+                cls.default_max_weight,
+                cls.default_min_weight,
+                cls.default_turnover_penalty,
+                cls.default_concentration_penalty,
+                "No assets were available for adaptive allocation controls.",
+                policy_asof=policy_asof,
+                oos_leakage_guard=oos_leakage_guard,
+            )
+
+        try:
+            returns_df = RiskEngine.sanitize_returns(
+                RiskEngine.compute_log_returns(price_df)
+            )
+            normalized_weights = RiskEngine._normalize_weights(weights, n_assets)
+            perf = RiskEngine.compute_performance_metrics(returns_df, normalized_weights)
+            ann_vol = float(perf["annualized_volatility"])
+            max_drawdown = float(perf["max_drawdown"])
+            avg_corr = cls._average_pairwise_correlation(returns_df)
+        except ValueError:
+            return cls._fallback(
+                "smart",
+                cls.default_max_weight,
+                cls.default_min_weight,
+                cls.default_turnover_penalty,
+                cls.default_concentration_penalty,
+                "Adaptive controls used defaults because the risk sample was incomplete.",
+                policy_asof=policy_asof,
+                oos_leakage_guard=oos_leakage_guard,
+            )
+
+        reasons: List[str] = []
+        confidence_parts = [0.45]
+
+        protocol = cls.SMART_PROTOCOL
+        normalization = protocol["normalization"]
+        volatility_score = cls._clamp(
+            ann_vol / float(normalization["volatility_denominator"]), 0.0, 1.0
+        )
+        drawdown_score = cls._clamp(
+            abs(max_drawdown) / float(normalization["drawdown_denominator"]), 0.0, 1.0
+        )
+        correlation_score = cls._clamp(
+            (avg_corr - float(normalization["correlation_floor"]))
+            / float(normalization["correlation_span"]),
+            0.0,
+            1.0,
+        )
+        concentration_score = cls._clamp(
+            float(np.sum(normalized_weights ** 2)) * n_assets - 1.0,
+            0.0,
+            1.0,
+        )
+
+        ml_score = 0.0
+        risk_level = ""
+        ml_confidence = 0.0
+        try:
+            if ml_result is None:
+                ml_result = MLRiskEngine().evaluate_from_prices(
+                    tickers=tickers,
+                    price_df=price_df,
+                    weights=normalized_weights.tolist(),
+                    horizon=5,
+                    confidence_level=0.95,
+                    source="allocation_policy",
+                )
+            ml_confidence = (
+                ml_result.diagnostics.confidence if ml_result.diagnostics else 0.65
+            )
+            ml_score = cls._clamp(
+                (ml_result.risk_score / 100.0)
+                * max(ml_confidence, float(protocol["signal_confidence_floor"])),
+                0.0,
+                1.0,
+            )
+            risk_level = ml_result.risk_level
+            if not prevalidated_ml_asof:
+                prevalidated_ml_asof = cls._diagnostic_asof(ml_result)
+            if oos_leakage_guard:
+                prevalidated_ml_asof = cls._validate_signal_asof(
+                    "ml", ml_result, policy_asof
+                )
+            confidence_parts.append(0.20)
+            if ml_result.diagnostics and ml_result.diagnostics.fallback_used:
+                reasons.append("ML downside forecast used fallback risk estimation.")
+            if risk_level in {"High", "Extreme"}:
+                reasons.append(f"ML downside forecast is {risk_level.lower()}.")
+        except ValueError as exc:
+            if "回测完整性错误" in str(exc):
+                raise
+            reasons.append("ML downside forecast was skipped because the sample was too short.")
+
+        regime_score = 0.0
+        regime = ""
+        regime_confidence = 0.0
+        try:
+            if regime_result is None:
+                regime_result = MarketRegimeDetector().evaluate_from_prices(
+                    tickers=tickers,
+                    price_df=price_df,
+                    weights=normalized_weights.tolist(),
+                    model_type="kmeans",
+                    source="allocation_policy",
+                )
+            regime = regime_result.smoothed_regime or regime_result.current_regime
+            regime_confidence = (
+                regime_result.diagnostics.confidence if regime_result.diagnostics else 0.65
+            )
+            regime_score = float(protocol["regime_base_scores"].get(regime, 0.0)) * max(
+                regime_confidence, float(protocol["signal_confidence_floor"])
+            )
+            if not prevalidated_regime_asof:
+                prevalidated_regime_asof = cls._diagnostic_asof(regime_result)
+            if oos_leakage_guard:
+                prevalidated_regime_asof = cls._validate_signal_asof(
+                    "regime", regime_result, policy_asof
+                )
+            confidence_parts.append(0.15)
+            if regime != "Normal":
+                reasons.append(f"Market regime is {regime.lower()}.")
+        except ValueError as exc:
+            if "回测完整性错误" in str(exc):
+                raise
+            reasons.append("Market regime signal was skipped because the sample was too short.")
+
+        anomaly_score = 0.0
+        anomaly_level = ""
+        anomaly_impact = ""
+        anomaly_confidence = 0.0
+        try:
+            if anomaly_result is None:
+                anomaly_result = RiskAnomalyDetector().evaluate_from_prices(
+                    tickers=tickers,
+                    price_df=price_df,
+                    weights=normalized_weights.tolist(),
+                    source="allocation_policy",
+                )
+            anomaly_confidence = (
+                anomaly_result.diagnostics.confidence if anomaly_result.diagnostics else 0.65
+            )
+            impact_boost = float(
+                protocol["anomaly_impact_boosts"].get(anomaly_result.decision_impact, 0.0)
+            )
+            anomaly_score = cls._clamp(
+                anomaly_result.anomaly_score
+                * max(anomaly_confidence, float(protocol["signal_confidence_floor"]))
+                + impact_boost,
+                0.0,
+                1.0,
+            )
+            anomaly_level = anomaly_result.alert_level
+            anomaly_impact = anomaly_result.decision_impact
+            if not prevalidated_anomaly_asof:
+                prevalidated_anomaly_asof = cls._diagnostic_asof(anomaly_result)
+            if oos_leakage_guard:
+                prevalidated_anomaly_asof = cls._validate_signal_asof(
+                    "anomaly", anomaly_result, policy_asof
+                )
+            confidence_parts.append(0.15)
+            if anomaly_level in {"Medium", "High", "Extreme"}:
+                reasons.append(f"Anomaly alert level is {anomaly_level.lower()}.")
+        except ValueError as exc:
+            if "回测完整性错误" in str(exc):
+                raise
+            reasons.append("Anomaly signal was skipped because the sample was too short.")
+
+        stress_weights = protocol["stress_weights"]
+        stress_score = cls._clamp(
+            float(stress_weights["volatility"]) * volatility_score
+            + float(stress_weights["drawdown"]) * drawdown_score
+            + float(stress_weights["correlation"]) * correlation_score
+            + float(stress_weights["ml"]) * ml_score
+            + float(stress_weights["regime"]) * regime_score
+            + float(stress_weights["anomaly"]) * anomaly_score,
+            0.0,
+            1.0,
+        )
+
+        diagnostic_thresholds = protocol["diagnostic_thresholds"]
+        if ann_vol >= float(diagnostic_thresholds["annualized_volatility"]):
+            reasons.append("Realized volatility is elevated.")
+        if max_drawdown <= float(diagnostic_thresholds["max_drawdown"]):
+            reasons.append("Recent drawdown is material.")
+        if avg_corr >= float(diagnostic_thresholds["average_correlation"]):
+            reasons.append("Asset correlations are reducing diversification.")
+        if concentration_score >= float(diagnostic_thresholds["concentration"]):
+            reasons.append("Current allocation is already concentrated.")
+        if not reasons:
+            reasons.append("Risk state is stable enough for balanced allocation controls.")
+
+        feasible_cap = 1.0 / n_assets
+        if n_assets == 1:
+            max_weight = 1.0
+        elif n_assets == 2:
+            max_weight = cls._clamp(
+                0.78 - 0.20 * stress_score - 0.05 * concentration_score,
+                feasible_cap,
+                0.85,
+            )
+            reasons.append("Two-asset portfolio keeps enough max-weight room for relative signals.")
+        else:
+            max_weight = cls._clamp(
+                0.55 - 0.25 * stress_score - 0.05 * concentration_score,
+                feasible_cap,
+                1.0,
+            )
+        min_weight = cls._clamp(
+            0.01 + 0.035 * stress_score,
+            0.0,
+            min(0.20, 0.5 / n_assets),
+        )
+        turnover_penalty = cls._clamp(
+            0.003 + 0.030 * stress_score + 0.010 * drawdown_score,
+            0.0,
+            0.05,
+        )
+        concentration_penalty = cls._clamp(
+            0.004 + 0.035 * stress_score + 0.010 * correlation_score,
+            0.0,
+            0.05,
+        )
+        confidence = cls._clamp(sum(confidence_parts), 0.0, 0.95)
+
+        return AllocationPolicyResult(
+            mode="smart",
+            policy_version=cls.POLICY_VERSION,
+            max_weight=round(max_weight, 4),
+            min_weight=round(min_weight, 4),
+            turnover_penalty=round(turnover_penalty, 4),
+            concentration_penalty=round(concentration_penalty, 4),
+            confidence=round(confidence, 4),
+            reasons=reasons[:6],
+            risk_level=risk_level,
+            regime=regime,
+            anomaly_level=anomaly_level,
+            anomaly_impact=anomaly_impact,
+            annualized_volatility=round(ann_vol, 6),
+            max_drawdown=round(max_drawdown, 6),
+            average_correlation=round(avg_corr, 6),
+            policy_asof=policy_asof,
+            oos_leakage_guard=oos_leakage_guard,
+            ml_asof=prevalidated_ml_asof or policy_asof,
+            ml_confidence=round(ml_confidence, 4),
+            regime_confidence=round(regime_confidence, 4),
+            anomaly_confidence=round(anomaly_confidence, 4),
+            regime_asof=prevalidated_regime_asof or policy_asof,
+            anomaly_asof=prevalidated_anomaly_asof or policy_asof,
+            stress_score=round(stress_score, 8),
+            volatility_score=round(volatility_score, 8),
+            drawdown_score=round(drawdown_score, 8),
+            correlation_score=round(correlation_score, 8),
+            concentration_score=round(concentration_score, 8),
+            ml_score=round(ml_score, 8),
+            regime_score=round(regime_score, 8),
+            anomaly_score=round(anomaly_score, 8),
+            stress_component_weights={
+                key: float(value) for key, value in stress_weights.items()
+            },
+        )

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepfirm-quant-reproducibility"
+version = "1.0.0"
+description = "Public reproducibility package for the DeepFirm Quant IEEE Access manuscript"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {file = "LICENSE"}
+authors = [{name = "Hongyi Zhou"}]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

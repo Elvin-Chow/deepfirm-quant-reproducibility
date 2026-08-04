@@ -1,0 +1,21 @@
+model_or_variant,variant_label,analysis_tier,metric,estimate,ci_low,ci_high,p_value,holm_adjusted_p_value,bh_adjusted_p_value,status
+without_model_view,Without model view,parent_primary,net_mean_log_return,8.886182664105594e-05,-0.0001175404454341,0.0002860934091539,0.2868565717141429,1.0,,estimable
+without_model_view,Without model view,parent_primary,net_information_ratio,0.085397522748397,-0.1247872910288846,0.2781080075769137,0.3033483258370814,1.0,,estimable
+fixed_view_uncertainty,Fixed view uncertainty,parent_primary,net_mean_log_return,1.959965549441843e-05,-1.4117715662712664e-05,5.0799193506313064e-05,0.1544227886056971,1.0,,estimable
+fixed_view_uncertainty,Fixed view uncertainty,parent_primary,net_information_ratio,0.0196971966586286,-0.0134871689383643,0.0493156646340436,0.1419290354822588,1.0,,estimable
+fixed_smart_policy,Fixed Smart policy,parent_primary,net_mean_log_return,-9.924257997738105e-06,-3.718398050133291e-05,1.9277418320115464e-05,0.5257371314342829,1.0,,estimable
+fixed_smart_policy,Fixed Smart policy,parent_primary,net_information_ratio,-0.0137789871839698,-0.0412200822290674,0.0127315813764752,0.3628185907046476,1.0,,estimable
+guard_disabled,Guard disabled,parent_primary,net_mean_log_return,-9.269663996032752e-06,-4.168548518731945e-05,2.235419672535905e-05,0.7041479260369815,1.0,,estimable
+guard_disabled,Guard disabled,parent_primary,net_information_ratio,-0.0077471098828664,-0.0407453305188952,0.0245893246732314,0.7456271864067965,1.0,,estimable
+risk_inputs_neutralized,Risk inputs neutralized,smart_decomposition,net_mean_log_return,-1.577747048793032e-05,-4.0781895212672595e-05,9.488774330831854e-06,0.3298350824587706,,0.7178683385579937,estimable
+risk_inputs_neutralized,Risk inputs neutralized,smart_decomposition,net_information_ratio,-0.0175831738182493,-0.0425320374610785,0.0069391870386681,0.2943528235882059,,0.7178683385579937,estimable
+regime_input_neutralized,Regime input neutralized,smart_decomposition,net_mean_log_return,-6.345564337196381e-07,-7.333354968745603e-06,5.6285695837968285e-06,0.8540729635182409,,0.9500249875062468,estimable
+regime_input_neutralized,Regime input neutralized,smart_decomposition,net_information_ratio,-0.0004122732735504,-0.0070492836514542,0.0058847425843209,0.904047976011994,,0.9500249875062468,estimable
+anomaly_input_neutralized,Anomaly input neutralized,smart_decomposition,net_mean_log_return,4.2867340238074945e-07,-4.75781685548462e-06,5.5191808671928726e-06,0.8590704647676161,,0.9500249875062468,estimable
+anomaly_input_neutralized,Anomaly input neutralized,smart_decomposition,net_information_ratio,0.0005371136972718,-0.0047631459170641,0.005691291578895,0.8350824587706147,,0.9500249875062468,estimable
+fixed_weight_bounds,Fixed weight bounds,smart_decomposition,net_mean_log_return,2.1852572324634455e-06,-8.816289158703746e-06,1.3515352467703094e-05,0.7766116941529235,,0.9500249875062468,estimable
+fixed_weight_bounds,Fixed weight bounds,smart_decomposition,net_information_ratio,0.0030139024712161,-0.0073324377958226,0.0138484110933597,0.6591704147926037,,0.935323383084577,estimable
+fixed_turnover_penalty,Fixed turnover penalty,smart_decomposition,net_mean_log_return,-1.3268385501754524e-05,-2.5082080740391564e-05,-2.260930552305243e-06,0.0264867566216891,,0.257471264367816,estimable
+fixed_turnover_penalty,Fixed turnover penalty,smart_decomposition,net_information_ratio,-0.012723779061827,-0.0244754209419874,-0.0010523055319145,0.0479760119940029,,0.3251231527093596,estimable
+fixed_concentration_penalty,Fixed concentration penalty,smart_decomposition,net_mean_log_return,-1.537404256448608e-05,-2.5584348648822592e-05,-5.5158727399796295e-06,0.0219890054972513,,0.257471264367816,estimable
+fixed_concentration_penalty,Fixed concentration penalty,smart_decomposition,net_information_ratio,-0.0145984702077222,-0.0246696766853964,-0.0045319409583368,0.0279860069965017,,0.257471264367816,estimable

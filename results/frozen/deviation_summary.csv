@@ -1,0 +1,5 @@
+category,allowed_by_protocol,fatal,rows
+model_convergence_or_optimizer_failure,True,False,5
+predeclared_provider_fallback,True,False,4
+predeclared_same_index_temporal_completeness_fallback,True,False,2
+predeclared_slice_not_estimable,True,False,384

@@ -1,0 +1,3 @@
+failure_id,stage,status,outcomes_generated,scientific_reason,handling,claim_boundary
+decimal_round_trip_identity,input_persistence,aborted_before_scoring,False,decimal CSV round-trip identity check was stricter than numerical equivalence,changed public inspection to round-trip parsing while preserving exact schema and file hashing,identity-check failure only; no performance evidence
+benchmark_temporal_coverage,input_acquisition,aborted_before_scoring,False,primary CSI 300 route ended on 2026-07-17 before the required outcome end 2026-07-31,required the unchanged 000300 official series to pass identity overlap and date-completeness gates,input-coverage failure only; no performance evidence

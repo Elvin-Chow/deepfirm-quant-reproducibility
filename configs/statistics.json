@@ -1,0 +1,27 @@
+{
+  "protocol_version": "dependence-aware-inference-v1",
+  "status": "frozen",
+  "repeated_run_seeds": [20260803, 20260804, 20260805, 20260806, 20260807],
+  "minimum_paired_successes": 4,
+  "warning": {
+    "resampling_unit": "same_date_cross_portfolio_rows",
+    "block_method": "circular_moving_block",
+    "block_length_sessions": 20,
+    "bootstrap_replicates": 2000,
+    "randomization_replicates": 2000,
+    "iid_row_bootstrap_allowed": false
+  },
+  "allocation": {
+    "pairing": "same_portfolio_same_date",
+    "block_method": "within_portfolio_moving_block",
+    "block_length_sessions": 21,
+    "bootstrap_replicates": 2000,
+    "randomization_replicates": 2000
+  },
+  "confidence_level": 0.95,
+  "primary_correction": {"method": "Holm", "alpha": 0.05},
+  "sensitivity_correction": {"method": "Benjamini-Hochberg", "q": 0.10},
+  "slices": ["overall", "market", "early_late", "training_volatility_regime"],
+  "insufficient_slice_action": "retain_as_not_estimable",
+  "failed_run_action": "retain_without_imputation"
+}

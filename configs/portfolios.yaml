@@ -1,0 +1,66 @@
+markets:
+  us:
+    - name: us_defensive_income_zero_overlap
+      market: us
+      tickers: [VIG, USMV, KO, PEP, MCD]
+      weights: [0.24, 0.22, 0.18, 0.18, 0.18]
+      benchmark: SPY
+      description: US defensive income sleeve with zero ticker overlap versus frozen training-domain portfolios.
+    - name: us_midcap_sector_zero_overlap
+      market: us
+      tickers: [MDY, IJR, SMH, XLU, XLI]
+      weights: [0.24, 0.22, 0.20, 0.18, 0.16]
+      benchmark: SPY
+      description: US mid-cap and sector ETF sleeve with zero ticker overlap versus frozen training-domain portfolios.
+  hk:
+    - name: hk_insurance_industrial_zero_overlap
+      market: hk
+      tickers: [2318.HK, 2020.HK, 1109.HK, 0066.HK, 02822.HK]
+      weights: [0.22, 0.20, 0.18, 0.20, 0.20]
+      benchmark: ^HSI
+      description: Hong Kong insurance, industrial, transport, and cross-asset sleeve with zero ticker overlap.
+    - name: hk_cross_asset_zero_overlap
+      market: hk
+      tickers: [2318.HK, 2020.HK, 1109.HK, 0066.HK, 03188.HK]
+      weights: [0.22, 0.20, 0.18, 0.20, 0.20]
+      benchmark: ^HSI
+      description: Hong Kong cross-asset sleeve using cached real-data tickers with zero training-security overlap.
+  cn:
+    - name: cn_consumption_resource_zero_overlap
+      market: cn
+      tickers: ["000651", "600887", "002415", "600028", "601088"]
+      weights: [0.22, 0.20, 0.18, 0.20, 0.20]
+      benchmark: "000300"
+      description: China consumption, security technology, energy, and resource sleeve with zero training-security overlap.
+    - name: cn_state_resource_zero_overlap
+      market: cn
+      tickers: ["601857", "600028", "601088", "000651", "600887"]
+      weights: [0.22, 0.20, 0.18, 0.20, 0.20]
+      benchmark: "000300"
+      description: China state-resource and defensive consumption sleeve with zero training-security overlap.
+  jp:
+    - name: jp_financial_domestic_zero_overlap
+      market: jp
+      tickers: [8316.T, 8766.T, 7011.T, 9433.T, 4452.T]
+      weights: [0.22, 0.20, 0.18, 0.20, 0.20]
+      benchmark: ^N225
+      description: Japan financial, industrial, telecom, and staples sleeve with zero training-security overlap.
+    - name: jp_etf_style_zero_overlap
+      market: jp
+      tickers: [1475.T, 1489.T, 2516.T, 8316.T, 9020.T]
+      weights: [0.24, 0.20, 0.18, 0.18, 0.20]
+      benchmark: ^N225
+      description: Japan ETF style and domestic sleeve with zero training-security overlap.
+  tw:
+    - name: tw_income_factor_zero_overlap
+      market: tw
+      tickers: [00878.TW, 00919.TW, 2882.TW, 2382.TW, 2891.TW]
+      weights: [0.24, 0.20, 0.18, 0.18, 0.20]
+      benchmark: ^TWII
+      description: Taiwan income, hardware, and financial sleeve with zero training-security overlap.
+    - name: tw_supply_chain_zero_overlap
+      market: tw
+      tickers: [2357.TW, 2882.TW, 2382.TW, 2891.TW, 00878.TW]
+      weights: [0.24, 0.20, 0.18, 0.18, 0.20]
+      benchmark: ^TWII
+      description: Taiwan hardware, financial, and income sleeve with zero training-security overlap.

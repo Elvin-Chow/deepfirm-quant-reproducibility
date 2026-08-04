@@ -1,0 +1,1582 @@
+{
+  "acceptance_gate": {
+    "final_test_used": false,
+    "passed": true,
+    "rows": [
+      {
+        "gate_id": "validation_positive_events",
+        "operator": ">=",
+        "passed": true,
+        "probability_source": "labels",
+        "threshold": 250.0,
+        "value": 505.0
+      },
+      {
+        "gate_id": "validation_roc_auc",
+        "operator": ">=",
+        "passed": true,
+        "probability_source": "raw_binary_logistic_probability",
+        "threshold": 0.58,
+        "value": 0.5992831422938504
+      },
+      {
+        "base_rate": 0.04588406323823369,
+        "gate_id": "validation_average_precision",
+        "operator": ">",
+        "passed": true,
+        "probability_source": "raw_binary_logistic_probability",
+        "threshold": 0.057355079047792114,
+        "threshold_formula": "max(1.25 * base_rate, base_rate + 0.01)",
+        "value": 0.06796872024774969
+      },
+      {
+        "gate_id": "validation_calibration_error",
+        "operator": "<=",
+        "passed": true,
+        "probability_source": "isotonic_fit_on_independent_calibration_role",
+        "threshold": 0.1,
+        "value": 0.007925741835954271
+      }
+    ],
+    "thresholds_unchanged": true,
+    "validation_role_only": true
+  },
+  "artifact_hash": "e54f11cc8d5d7a8bdc633a8b19bcc36145fc9ffdbcf4cd99f96972bbc1442254",
+  "artifact_hash_algorithm": "sha256",
+  "artifact_hash_files": [
+    {
+      "path": "xgb_crisis_model.json",
+      "sha256": "a5bffcb53f0ad4b33457d9639b28a63012a9e7d370f2fd0e9b073df8c1ba5681",
+      "status": "present"
+    },
+    {
+      "path": "calibration.json",
+      "sha256": "dad018d6dc9c8e5bc690bc7b6f4f2a4721899ee4ae4996f9a442e0d90b38ecb9",
+      "status": "present"
+    },
+    {
+      "path": "feature_schema.json",
+      "sha256": "18c13dc3c373c4a1bc52399ed7abef81b3b740fb1c27d98b080b32839c728e94",
+      "status": "present"
+    },
+    {
+      "path": "shap_background_sample.csv",
+      "sha256": "c1d68dbb72367e3b5b5af8538ace762f5deddf3b83fe54d71d6b2f2b78e76193",
+      "status": "present"
+    }
+  ],
+  "calibration_end": "2022-06-17",
+  "calibration_metrics_selected_candidate": {
+    "calibrated": {
+      "brier_score": 0.05126283766313909,
+      "calibration_error": 0.0,
+      "log_loss": 0.206399034231434
+    },
+    "raw": {
+      "average_precision": 0.08170578756607604,
+      "brier_score": 0.24199781922217153,
+      "calibration_error": 0.4236421943417839,
+      "log_loss": 0.6792499074797552,
+      "roc_auc": 0.6238283692412794
+    }
+  },
+  "calibration_start": "2020-09-16",
+  "covered_market_scope": [
+    "us",
+    "hk",
+    "cn",
+    "jp",
+    "tw"
+  ],
+  "covered_training_markets": [
+    "us",
+    "hk",
+    "cn",
+    "jp",
+    "tw"
+  ],
+  "data_access_completed_at_utc": "2026-08-03T07:32:26+00:00",
+  "data_access_started_at_utc": "2026-08-03T07:30:27+00:00",
+  "data_provenance": {
+    "asof_date": "2025-12-31",
+    "cache_status": "mixed",
+    "calendar": "XTAI",
+    "coverage_ratio": 0.9338869370808048,
+    "is_partial": false,
+    "is_stale": false,
+    "provider_chain": [
+      "yahoo_chart",
+      "akshare",
+      "yahoo_chart_cn",
+      "mixed"
+    ],
+    "warnings": [
+      "510300: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "510050: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "510500: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "600519: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "300750: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "300750: China A-share price coverage is low (59% of requested business days); results may be affected by missing prices or trading suspensions.",
+      "601318: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "600036: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "002594: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "300760: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "300760: China A-share price coverage is low (56% of requested business days); results may be affected by missing prices or trading suspensions.",
+      "688981: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "688981: China A-share price coverage is low (42% of requested business days); results may be affected by missing prices or trading suspensions.",
+      "300124: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "300124: China A-share close price was unchanged for 11 consecutive observations; check for suspension or stale data.",
+      "600900: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "600900: China A-share close price was unchanged for 62 consecutive observations; check for suspension or stale data.",
+      "601398: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "600276: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "000333: AKShare A-share data was unavailable; using Yahoo Finance fallback",
+      "000333: China A-share close price was unchanged for 30 consecutive observations; check for suspension or stale data."
+    ]
+  },
+  "data_provenance_contract_version": "provider-contract-v1",
+  "dependencies": {
+    "numpy": "2.3.5",
+    "pandas": "2.3.3",
+    "xgboost": "3.2.0"
+  },
+  "derived_label_frame_sha256": "775d5347eef588a4bab7dac76813c9f868c3cf6fda52190435bf8da2fca240c4",
+  "domain_coverage_status": "complete",
+  "domain_market_coverage": {
+    "cn": {
+      "defined_portfolio_count": 4,
+      "missing_requirements": [],
+      "portfolio_count": 4,
+      "positive_events": 468,
+      "skipped_portfolio_count": 0,
+      "skipped_portfolios": [],
+      "status": "complete",
+      "training_end": "2025-12-30",
+      "training_rows": 8747,
+      "training_start": "2014-04-04",
+      "training_window_days": 4288,
+      "validation_positive_events": 104
+    },
+    "hk": {
+      "defined_portfolio_count": 4,
+      "missing_requirements": [],
+      "portfolio_count": 4,
+      "positive_events": 399,
+      "skipped_portfolio_count": 0,
+      "skipped_portfolios": [],
+      "status": "complete",
+      "training_end": "2025-12-30",
+      "training_rows": 7555,
+      "training_start": "2014-04-01",
+      "training_window_days": 4291,
+      "validation_positive_events": 76
+    },
+    "jp": {
+      "defined_portfolio_count": 4,
+      "missing_requirements": [],
+      "portfolio_count": 4,
+      "positive_events": 626,
+      "skipped_portfolio_count": 0,
+      "skipped_portfolios": [],
+      "status": "complete",
+      "training_end": "2025-12-29",
+      "training_rows": 11476,
+      "training_start": "2014-04-04",
+      "training_window_days": 4287,
+      "validation_positive_events": 131
+    },
+    "tw": {
+      "defined_portfolio_count": 4,
+      "missing_requirements": [],
+      "portfolio_count": 4,
+      "positive_events": 664,
+      "skipped_portfolio_count": 0,
+      "skipped_portfolios": [],
+      "status": "complete",
+      "training_end": "2025-12-30",
+      "training_rows": 11425,
+      "training_start": "2014-04-09",
+      "training_window_days": 4283,
+      "validation_positive_events": 117
+    },
+    "us": {
+      "defined_portfolio_count": 4,
+      "missing_requirements": [],
+      "portfolio_count": 4,
+      "positive_events": 657,
+      "skipped_portfolio_count": 0,
+      "skipped_portfolios": [],
+      "status": "complete",
+      "training_end": "2025-12-30",
+      "training_rows": 11824,
+      "training_start": "2014-04-01",
+      "training_window_days": 4291,
+      "validation_positive_events": 77
+    }
+  },
+  "domain_market_requirements": {
+    "cn": {
+      "portfolio_count": 4,
+      "positive_events": 40,
+      "training_rows": 480,
+      "training_window_days": 1825,
+      "validation_positive_events": 50
+    },
+    "hk": {
+      "portfolio_count": 4,
+      "positive_events": 40,
+      "training_rows": 480,
+      "training_window_days": 1825,
+      "validation_positive_events": 50
+    },
+    "jp": {
+      "portfolio_count": 4,
+      "positive_events": 40,
+      "training_rows": 480,
+      "training_window_days": 1825,
+      "validation_positive_events": 50
+    },
+    "tw": {
+      "portfolio_count": 4,
+      "positive_events": 40,
+      "training_rows": 480,
+      "training_window_days": 1825,
+      "validation_positive_events": 50
+    },
+    "us": {
+      "portfolio_count": 4,
+      "positive_events": 40,
+      "training_rows": 480,
+      "training_window_days": 1825,
+      "validation_positive_events": 50
+    }
+  },
+  "domain_portfolio_count": 20,
+  "domain_portfolios": [
+    {
+      "market": "us",
+      "n_observations": 3018,
+      "n_training_rows": 2956,
+      "name": "us_index_beta",
+      "positive_events": 163,
+      "positive_rate": 0.05514208389715832,
+      "tickers": [
+        "SPY",
+        "QQQ",
+        "IWM"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-01",
+      "weights": [
+        0.5,
+        0.3,
+        0.2
+      ]
+    },
+    {
+      "market": "us",
+      "n_observations": 3018,
+      "n_training_rows": 2956,
+      "name": "us_mega_cap_growth",
+      "positive_events": 166,
+      "positive_rate": 0.05615696887686062,
+      "tickers": [
+        "AAPL",
+        "MSFT",
+        "NVDA",
+        "AMZN",
+        "GOOGL"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-01",
+      "weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "market": "us",
+      "n_observations": 3018,
+      "n_training_rows": 2956,
+      "name": "us_sector_rotation",
+      "positive_events": 154,
+      "positive_rate": 0.052097428958051424,
+      "tickers": [
+        "XLK",
+        "XLF",
+        "XLV",
+        "XLE"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-01",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "us",
+      "n_observations": 3018,
+      "n_training_rows": 2956,
+      "name": "us_defensive_quality",
+      "positive_events": 174,
+      "positive_rate": 0.05886332882273342,
+      "tickers": [
+        "XLP",
+        "COST",
+        "PG",
+        "JNJ"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-01",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "hk",
+      "n_observations": 416,
+      "n_training_rows": 354,
+      "name": "hk_index_beta",
+      "positive_events": 19,
+      "positive_rate": 0.05367231638418079,
+      "tickers": [
+        "02800.HK",
+        "02828.HK",
+        "03033.HK"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2024-07-24",
+      "weights": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ]
+    },
+    {
+      "market": "hk",
+      "n_observations": 1500,
+      "n_training_rows": 1438,
+      "name": "hk_large_cap_platforms",
+      "positive_events": 68,
+      "positive_rate": 0.04728789986091794,
+      "tickers": [
+        "0700.HK",
+        "9988.HK",
+        "3690.HK",
+        "1299.HK"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2020-02-26",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "hk",
+      "n_observations": 2953,
+      "n_training_rows": 2891,
+      "name": "hk_financial_property",
+      "positive_events": 159,
+      "positive_rate": 0.05499827049463853,
+      "tickers": [
+        "0005.HK",
+        "0388.HK",
+        "0016.HK",
+        "0823.HK"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-01",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "hk",
+      "n_observations": 2934,
+      "n_training_rows": 2872,
+      "name": "hk_defensive_yield",
+      "positive_events": 153,
+      "positive_rate": 0.05327298050139276,
+      "tickers": [
+        "0002.HK",
+        "0003.HK",
+        "1038.HK",
+        "2638.HK"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-30",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "cn",
+      "n_observations": 2916,
+      "n_training_rows": 2854,
+      "name": "cn_index_beta",
+      "positive_events": 162,
+      "positive_rate": 0.056762438682550806,
+      "tickers": [
+        "510300",
+        "510050",
+        "510500"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-04",
+      "weights": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ]
+    },
+    {
+      "market": "cn",
+      "n_observations": 1835,
+      "n_training_rows": 1773,
+      "name": "cn_large_cap_core",
+      "positive_events": 80,
+      "positive_rate": 0.04512126339537507,
+      "tickers": [
+        "600519",
+        "300750",
+        "601318",
+        "600036"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2018-09-05",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "cn",
+      "n_observations": 1327,
+      "n_training_rows": 1265,
+      "name": "cn_sector_growth",
+      "positive_events": 68,
+      "positive_rate": 0.05375494071146245,
+      "tickers": [
+        "002594",
+        "300760",
+        "688981",
+        "300124"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2020-10-19",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "cn",
+      "n_observations": 2917,
+      "n_training_rows": 2855,
+      "name": "cn_defensive_value",
+      "positive_events": 158,
+      "positive_rate": 0.0553415061295972,
+      "tickers": [
+        "600900",
+        "601398",
+        "600276",
+        "000333"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-04",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "jp",
+      "n_observations": 2931,
+      "n_training_rows": 2869,
+      "name": "jp_index_beta",
+      "positive_events": 155,
+      "positive_rate": 0.05402579295921924,
+      "tickers": [
+        "1321.T",
+        "1306.T",
+        "1348.T"
+      ],
+      "training_end": "2025-12-29",
+      "training_start": "2014-04-04",
+      "weights": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ]
+    },
+    {
+      "market": "jp",
+      "n_observations": 2931,
+      "n_training_rows": 2869,
+      "name": "jp_large_cap_core",
+      "positive_events": 156,
+      "positive_rate": 0.05437434646218194,
+      "tickers": [
+        "7203.T",
+        "6758.T",
+        "9984.T",
+        "6861.T",
+        "8306.T"
+      ],
+      "training_end": "2025-12-29",
+      "training_start": "2014-04-04",
+      "weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "market": "jp",
+      "n_observations": 2931,
+      "n_training_rows": 2869,
+      "name": "jp_exporter_industrials",
+      "positive_events": 170,
+      "positive_rate": 0.059254095503659815,
+      "tickers": [
+        "7203.T",
+        "7267.T",
+        "8035.T",
+        "6954.T",
+        "6501.T"
+      ],
+      "training_end": "2025-12-29",
+      "training_start": "2014-04-04",
+      "weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "market": "jp",
+      "n_observations": 2931,
+      "n_training_rows": 2869,
+      "name": "jp_defensive_value",
+      "positive_events": 145,
+      "positive_rate": 0.05054025792959219,
+      "tickers": [
+        "9432.T",
+        "4502.T",
+        "3382.T",
+        "2914.T"
+      ],
+      "training_end": "2025-12-29",
+      "training_start": "2014-04-04",
+      "weights": [
+        0.25,
+        0.25,
+        0.25,
+        0.25
+      ]
+    },
+    {
+      "market": "tw",
+      "n_observations": 2919,
+      "n_training_rows": 2857,
+      "name": "tw_index_beta",
+      "positive_events": 166,
+      "positive_rate": 0.05810290514525726,
+      "tickers": [
+        "0050.TW",
+        "006208.TW",
+        "0056.TW"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-09",
+      "weights": [
+        0.3333333333333333,
+        0.3333333333333333,
+        0.3333333333333333
+      ]
+    },
+    {
+      "market": "tw",
+      "n_observations": 2918,
+      "n_training_rows": 2856,
+      "name": "tw_large_cap_core",
+      "positive_events": 166,
+      "positive_rate": 0.05812324929971989,
+      "tickers": [
+        "2330.TW",
+        "2317.TW",
+        "2454.TW",
+        "2308.TW",
+        "2881.TW"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-09",
+      "weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "market": "tw",
+      "n_observations": 2918,
+      "n_training_rows": 2856,
+      "name": "tw_semiconductor_chain",
+      "positive_events": 172,
+      "positive_rate": 0.06022408963585434,
+      "tickers": [
+        "2330.TW",
+        "2454.TW",
+        "2303.TW",
+        "3711.TW",
+        "3034.TW"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-09",
+      "weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ]
+    },
+    {
+      "market": "tw",
+      "n_observations": 2918,
+      "n_training_rows": 2856,
+      "name": "tw_defensive_income",
+      "positive_events": 160,
+      "positive_rate": 0.056022408963585436,
+      "tickers": [
+        "2412.TW",
+        "1303.TW",
+        "1216.TW",
+        "3045.TW",
+        "2886.TW"
+      ],
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-09",
+      "weights": [
+        0.2,
+        0.2,
+        0.2,
+        0.2,
+        0.2
+      ]
+    }
+  ],
+  "feature_schema_hash": "18c13dc3c373c4a1bc52399ed7abef81b3b740fb1c27d98b080b32839c728e94",
+  "final_test_end": "2025-12-30",
+  "final_test_metrics": {
+    "calibrated": {
+      "average_precision": 0.08533206622165831,
+      "brier_score": 0.04444712811420999,
+      "calibration_error": 0.002675520206194472,
+      "log_loss": 0.20181382981846563,
+      "positive_events": 272.0,
+      "positive_rate": 0.047156726768377254,
+      "precision_at_0_60": 0.0,
+      "recall_at_0_60": 0.0,
+      "roc_auc": 0.6230166056597312
+    },
+    "opened_after_validation_acceptance": true,
+    "raw": {
+      "average_precision": 0.10234273427932986,
+      "brier_score": 0.2190240013079358,
+      "calibration_error": 0.4057613844426553,
+      "log_loss": 0.6292978328983221,
+      "positive_events": 272.0,
+      "positive_rate": 0.047156726768377254,
+      "precision_at_0_60": 0.11005434782608696,
+      "recall_at_0_60": 0.2977941176470588,
+      "roc_auc": 0.6303595128007535
+    },
+    "used_for_selection_or_acceptance": false
+  },
+  "final_test_start": "2024-10-29",
+  "final_test_status": "reported_after_validation_acceptance",
+  "global_domain_complete": true,
+  "hyperparameter_budget": {
+    "candidate_count_per_horizon": 4,
+    "candidates": [
+      {
+        "candidate_id": "c01_legacy_capacity",
+        "colsample_bytree": 0.85,
+        "learning_rate": 0.03,
+        "max_depth": 3,
+        "min_child_weight": 3.0,
+        "n_estimators": 300,
+        "reg_lambda": 2.0,
+        "scale_pos_weight": "balanced_capped_20",
+        "subsample": 0.85
+      },
+      {
+        "candidate_id": "c02_shallow_regularized",
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.03,
+        "max_depth": 2,
+        "min_child_weight": 5.0,
+        "n_estimators": 450,
+        "reg_lambda": 5.0,
+        "scale_pos_weight": "balanced_capped_20",
+        "subsample": 0.9
+      },
+      {
+        "candidate_id": "c03_slow_depth3",
+        "colsample_bytree": 0.85,
+        "learning_rate": 0.02,
+        "max_depth": 3,
+        "min_child_weight": 5.0,
+        "n_estimators": 500,
+        "reg_lambda": 4.0,
+        "scale_pos_weight": "balanced_capped_20",
+        "subsample": 0.9
+      },
+      {
+        "candidate_id": "c04_compact_shallow",
+        "colsample_bytree": 1.0,
+        "learning_rate": 0.05,
+        "max_depth": 2,
+        "min_child_weight": 3.0,
+        "n_estimators": 250,
+        "reg_lambda": 3.0,
+        "scale_pos_weight": "balanced_capped_20",
+        "subsample": 0.85
+      }
+    ],
+    "selection_order": [
+      "highest_calibration_raw_average_precision",
+      "highest_calibration_raw_roc_auc",
+      "lowest_calibration_calibrated_brier_score",
+      "lexicographically_smallest_candidate_id"
+    ]
+  },
+  "incomplete_training_markets": [],
+  "is_global_complete": true,
+  "missing_training_markets": [],
+  "model_health": "ok",
+  "model_name": "XGBClassifier",
+  "model_version": "crisis-warning-xgb-v2-h1-2026-08-03",
+  "n_observations": 52267,
+  "n_training_rows": 26001,
+  "per_market_summary": [
+    {
+      "market": "us",
+      "n_observations": 12072,
+      "n_training_rows": 11824,
+      "portfolio_count": 4,
+      "positive_events": 657,
+      "positive_rate": 0.05556495263870095,
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-01"
+    },
+    {
+      "market": "hk",
+      "n_observations": 7803,
+      "n_training_rows": 7555,
+      "portfolio_count": 4,
+      "positive_events": 399,
+      "positive_rate": 0.0528127068166777,
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-01"
+    },
+    {
+      "market": "cn",
+      "n_observations": 8995,
+      "n_training_rows": 8747,
+      "portfolio_count": 4,
+      "positive_events": 468,
+      "positive_rate": 0.05350405853435464,
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-04"
+    },
+    {
+      "market": "jp",
+      "n_observations": 11724,
+      "n_training_rows": 11476,
+      "portfolio_count": 4,
+      "positive_events": 626,
+      "positive_rate": 0.0545486232136633,
+      "training_end": "2025-12-29",
+      "training_start": "2014-04-04"
+    },
+    {
+      "market": "tw",
+      "n_observations": 11673,
+      "n_training_rows": 11425,
+      "portfolio_count": 4,
+      "positive_events": 664,
+      "positive_rate": 0.05811816192560175,
+      "training_end": "2025-12-30",
+      "training_start": "2014-04-09"
+    }
+  ],
+  "positive_events": 1584,
+  "positive_rate": 0.06092073381793008,
+  "probability_calibrated": true,
+  "protocol_frozen_at_utc": "2026-08-03T07:29:09Z",
+  "protocol_id": "role-separated-training-v1.1",
+  "protocol_sha256": "8fc151988fc4bc61937104f75862425bd76b04eacbff91e1c498c26b45697a92",
+  "public_release_note": "Protocol labels and internal source paths were removed for public release; model, calibration, and background-sample bytes are unchanged.",
+  "random_seed": 20260803,
+  "required_market_scope": [
+    "us",
+    "hk",
+    "cn",
+    "jp",
+    "tw"
+  ],
+  "required_training_markets": [
+    "us",
+    "hk",
+    "cn",
+    "jp",
+    "tw"
+  ],
+  "retrieval_timestamp_precision": "utc_second",
+  "selected_candidate": {
+    "candidate_id": "c02_shallow_regularized",
+    "colsample_bytree": 0.9,
+    "learning_rate": 0.03,
+    "max_depth": 2,
+    "min_child_weight": 5.0,
+    "n_estimators": 450,
+    "reg_lambda": 5.0,
+    "scale_pos_weight": "balanced_capped_20",
+    "subsample": 0.9
+  },
+  "selected_candidate_id": "c02_shallow_regularized",
+  "skipped_domain_portfolios": [],
+  "skipped_market_scope": [],
+  "source_bundle_sha256": "cdb25a3a9919c25fec196832275ca84dc110a9a2bd39b008a3884beb858b12d4",
+  "source_population_end": "2025-12-30",
+  "source_population_start": "2014-04-01",
+  "split_role_rows": {
+    "calibration": 8136,
+    "final_test": 5768,
+    "train": 26001,
+    "validation": 11006
+  },
+  "split_role_sha256": {
+    "calibration": "05694cd49941e025b4f63a1f8822cffed2faee525b7dcf16b6a77f9bcedc32a8",
+    "final_test": "9b31368d6ea6caff65ec92d17d9f000653744f16720697fd4158840e93cae9d7",
+    "train": "17901a4c8f3896ce2e87f1d1feeac5419b99a8fe784d93b592e5639b997a8d91",
+    "validation": "e47e9b2dfb4feb40c98715ac2b7001649721b25bd61db6f3d63a5820cbc818e5"
+  },
+  "target_definition": "Sum of portfolio log returns from t+1 through t+1 strictly below the trailing 5% quantile of historical 1D returns available by t-1.",
+  "temporal_split": {
+    "boundaries": {
+      "calibration_to_validation": {
+        "embargo_observations_per_group": 1,
+        "embargoed_rows": 20,
+        "evaluation_fraction": 0.22222222222222224,
+        "evaluation_rows_after_embargo": 11006,
+        "evaluation_start": "2022-06-22",
+        "group_columns": [
+          "domain_portfolio"
+        ],
+        "groups": [
+          {
+            "domain_portfolio": "cn_defensive_value",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_index_beta",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_large_cap_core",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_sector_growth",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_defensive_yield",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_financial_property",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_index_beta",
+            "embargo_end": "2024-07-24",
+            "embargo_start": "2024-07-24",
+            "embargoed_rows": 1,
+            "purge_end": "",
+            "purge_start": "",
+            "purged_rows": 0
+          },
+          {
+            "domain_portfolio": "hk_large_cap_platforms",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_defensive_value",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_exporter_industrials",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_index_beta",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_large_cap_core",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_defensive_income",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_index_beta",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_large_cap_core",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_semiconductor_chain",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-20",
+            "purge_start": "2022-06-20",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_defensive_quality",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-17",
+            "purge_start": "2022-06-17",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_index_beta",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-17",
+            "purge_start": "2022-06-17",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_mega_cap_growth",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-17",
+            "purge_start": "2022-06-17",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_sector_rotation",
+            "embargo_end": "2022-06-21",
+            "embargo_start": "2022-06-21",
+            "embargoed_rows": 1,
+            "purge_end": "2022-06-17",
+            "purge_start": "2022-06-17",
+            "purged_rows": 1
+          }
+        ],
+        "label_horizon_observations": 1,
+        "method": "chronological_purged_embargo",
+        "purge_observations_per_group": 1,
+        "purged_rows": 19,
+        "raw_boundary": "2022-06-21",
+        "raw_evaluation_rows": 11026,
+        "raw_train_rows": 34193,
+        "train_end": "2022-06-17",
+        "train_rows_after_purge": 34174
+      },
+      "train_to_calibration": {
+        "embargo_observations_per_group": 1,
+        "embargoed_rows": 19,
+        "evaluation_fraction": 0.21428571428571425,
+        "evaluation_rows_after_embargo": 8136,
+        "evaluation_start": "2020-09-16",
+        "group_columns": [
+          "domain_portfolio"
+        ],
+        "groups": [
+          {
+            "domain_portfolio": "cn_defensive_value",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_index_beta",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_large_cap_core",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_sector_growth",
+            "embargo_end": "2020-10-19",
+            "embargo_start": "2020-10-19",
+            "embargoed_rows": 1,
+            "purge_end": "",
+            "purge_start": "",
+            "purged_rows": 0
+          },
+          {
+            "domain_portfolio": "hk_defensive_yield",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_financial_property",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_large_cap_platforms",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_defensive_value",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_exporter_industrials",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_index_beta",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_large_cap_core",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_defensive_income",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_index_beta",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_large_cap_core",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_semiconductor_chain",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_defensive_quality",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_index_beta",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_mega_cap_growth",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_sector_rotation",
+            "embargo_end": "2020-09-15",
+            "embargo_start": "2020-09-15",
+            "embargoed_rows": 1,
+            "purge_end": "2020-09-14",
+            "purge_start": "2020-09-14",
+            "purged_rows": 1
+          }
+        ],
+        "label_horizon_observations": 1,
+        "method": "chronological_purged_embargo",
+        "purge_observations_per_group": 1,
+        "purged_rows": 18,
+        "raw_boundary": "2020-09-15",
+        "raw_evaluation_rows": 8155,
+        "raw_train_rows": 26019,
+        "train_end": "2020-09-11",
+        "train_rows_after_purge": 26001
+      },
+      "validation_to_final_test": {
+        "embargo_observations_per_group": 1,
+        "embargoed_rows": 20,
+        "evaluation_fraction": 0.1,
+        "evaluation_rows_after_embargo": 5768,
+        "evaluation_start": "2024-10-29",
+        "group_columns": [
+          "domain_portfolio"
+        ],
+        "groups": [
+          {
+            "domain_portfolio": "cn_defensive_value",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_index_beta",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_large_cap_core",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "cn_sector_growth",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_defensive_yield",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_financial_property",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_index_beta",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "hk_large_cap_platforms",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_defensive_value",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_exporter_industrials",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_index_beta",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "jp_large_cap_core",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_defensive_income",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_index_beta",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_large_cap_core",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "tw_semiconductor_chain",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_defensive_quality",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_index_beta",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_mega_cap_growth",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          },
+          {
+            "domain_portfolio": "us_sector_rotation",
+            "embargo_end": "2024-10-28",
+            "embargo_start": "2024-10-28",
+            "embargoed_rows": 1,
+            "purge_end": "2024-10-25",
+            "purge_start": "2024-10-25",
+            "purged_rows": 1
+          }
+        ],
+        "label_horizon_observations": 1,
+        "method": "chronological_purged_embargo",
+        "purge_observations_per_group": 1,
+        "purged_rows": 20,
+        "raw_boundary": "2024-10-28",
+        "raw_evaluation_rows": 5788,
+        "raw_train_rows": 45239,
+        "train_end": "2024-10-24",
+        "train_rows_after_purge": 45219
+      }
+    },
+    "group_columns": [
+      "domain_portfolio"
+    ],
+    "label_horizon_observations": 1,
+    "method": "nested_chronological_purged_embargo",
+    "requested_fractions": {
+      "calibration": 0.15,
+      "final_test": 0.1,
+      "train": 0.55,
+      "validation": 0.2
+    },
+    "roles": {
+      "calibration": {
+        "end": "2022-06-17",
+        "positive_events": 447,
+        "requested_fraction": 0.15,
+        "rows": 8136,
+        "start": "2020-09-16"
+      },
+      "final_test": {
+        "end": "2025-12-30",
+        "positive_events": 272,
+        "requested_fraction": 0.1,
+        "rows": 5768,
+        "start": "2024-10-29"
+      },
+      "train": {
+        "end": "2020-09-11",
+        "positive_events": 1584,
+        "requested_fraction": 0.55,
+        "rows": 26001,
+        "start": "2014-04-01"
+      },
+      "validation": {
+        "end": "2024-10-24",
+        "positive_events": 505,
+        "requested_fraction": 0.2,
+        "rows": 11006,
+        "start": "2022-06-22"
+      }
+    }
+  },
+  "trained_at": "2026-08-03T07:32:26+00:00",
+  "training_domain": "diversified_global",
+  "training_end": "2020-09-11",
+  "training_market_scope": "cn,hk,jp,tw,us",
+  "training_start": "2014-04-01",
+  "validation_end": "2024-10-24",
+  "validation_metrics": {
+    "average_precision": 0.06796872024774969,
+    "brier_score": 0.0437054678533932,
+    "calibration_error": 0.007925741835954271,
+    "calibration_probability_source": "isotonic_fit_on_calibration_role",
+    "log_loss": 0.2023706755992458,
+    "positive_rate": 0.04588406323823369,
+    "pr_auc": 0.06796872024774969,
+    "precision_at_0_60": 0.0,
+    "ranking_probability_source": "raw_binary_logistic_probability",
+    "recall_at_0_60": 0.0,
+    "roc_auc": 0.5992831422938504,
+    "validation_positive_events": 505.0
+  },
+  "validation_metrics_calibrated": {
+    "average_precision": 0.06587535765820263,
+    "brier_score": 0.0437054678533932,
+    "calibration_error": 0.007925741835954271,
+    "log_loss": 0.2023706755992458,
+    "positive_events": 505.0,
+    "positive_rate": 0.04588406323823369,
+    "precision_at_0_60": 0.0,
+    "recall_at_0_60": 0.0,
+    "roc_auc": 0.5979212729386452
+  },
+  "validation_metrics_raw": {
+    "average_precision": 0.06796872024774969,
+    "brier_score": 0.23742383092446595,
+    "calibration_error": 0.4270187397068595,
+    "log_loss": 0.6688001534231127,
+    "positive_events": 505.0,
+    "positive_rate": 0.04588406323823369,
+    "precision_at_0_60": 0.08076275939427931,
+    "recall_at_0_60": 0.2851485148514851,
+    "roc_auc": 0.5992831422938504
+  },
+  "validation_start": "2022-06-22",
+  "validation_status": "ok",
+  "warnings": []
+}
