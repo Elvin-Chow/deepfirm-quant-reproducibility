@@ -1,0 +1,177 @@
+[
+  {
+    "path": ".gitignore",
+    "bytes": 8,
+    "sha256": "ed3706cef3a4077a1093de168940cdbea8227ea3077d02edc6061f001aa1d7a9"
+  },
+  {
+    "path": "INJECTION_PROTOCOL.json",
+    "bytes": 3729,
+    "sha256": "b7cc4af87281446e87a7e557a554bbf43811f6391059d385073766c1df3ee5f2"
+  },
+  {
+    "path": "README.md",
+    "bytes": 2336,
+    "sha256": "fcfe04be80b04ca950275f49b553dc2c08b5c2bf12082d685a54bf5c582a522c"
+  },
+  {
+    "path": "requirements-lock.txt",
+    "bytes": 1692,
+    "sha256": "77d4e7b281482c3cb882ddb5b46b5624ef8b0ffed7c859ce50fbf2aee8e51667"
+  },
+  {
+    "path": "run_injections.py",
+    "bytes": 9257,
+    "sha256": "a51c84fa58110f4eff79ff6b22552de8299302df720b60d5eafcd968db9800c4"
+  },
+  {
+    "path": "snapshot/artifacts/crisis_warning/v2/global_h1/training_metadata.json",
+    "bytes": 46995,
+    "sha256": "b91c779c794badd54e8192dc10baf7ba2c538e2b2d9bf80e09628a00e608b959"
+  },
+  {
+    "path": "snapshot/backend/__init__.py",
+    "bytes": 38,
+    "sha256": "fac7588bf827357d333ce6b40f72d1d61794260d3c4a89873b9c41d3b4edbba7"
+  },
+  {
+    "path": "snapshot/backend/schemas.py",
+    "bytes": 11867,
+    "sha256": "34348c9e08785eeea1fb5e24963c9f73ab040c4c2bbdf1b9b97eac390a2c5681"
+  },
+  {
+    "path": "snapshot/backend/services.py",
+    "bytes": 150341,
+    "sha256": "ea8ad36ba2dcd32b92e6473c896e1302c828df8c3d1ffc45cbf2294a84867ffc"
+  },
+  {
+    "path": "snapshot/data_pipeline/__init__.py",
+    "bytes": 536,
+    "sha256": "59a3a83fbec454fd26bbc579ef5ed7228e31b7875bfbd0c276cfb833ff63b07a"
+  },
+  {
+    "path": "snapshot/data_pipeline/aligner.py",
+    "bytes": 9625,
+    "sha256": "47f8bcf106d645e9d1c8f949b3daaf7e2a4269737b24e72def1b4319b5a66a6f"
+  },
+  {
+    "path": "snapshot/data_pipeline/exceptions.py",
+    "bytes": 789,
+    "sha256": "bc01435d2dd2b118388ad475c746d798b32965b90140e05d3b8ea08dd2b68607"
+  },
+  {
+    "path": "snapshot/data_pipeline/fetcher.py",
+    "bytes": 68068,
+    "sha256": "b5ee8ff3d9e4bc4a8ebd717a50b0b342b0256eff307f9be2aec2ef7e8e17a0f2"
+  },
+  {
+    "path": "snapshot/data_pipeline/provenance.py",
+    "bytes": 1739,
+    "sha256": "3e4f5195b92deabbbbf659a75564bcece6470ca2ed2b77c00116abcc3e014dbf"
+  },
+  {
+    "path": "snapshot/experiments/__init__.py",
+    "bytes": 223,
+    "sha256": "b59817d4291a633685300aab2d214920c0bb195eddabbf6cc33f23f2f289450d"
+  },
+  {
+    "path": "snapshot/experiments/common.py",
+    "bytes": 20388,
+    "sha256": "5f80de49a82d500c1759010c86dded2925fdb53ff4787ce4dde1299a16a1a93d"
+  },
+  {
+    "path": "snapshot/experiments/portfolios/zero_overlap_supplement_portfolios.yaml",
+    "bytes": 3013,
+    "sha256": "6f314fa9fb01ce982cd19cc495ea28dc95eb8195cb69cecbaea43d7c2d195a89"
+  },
+  {
+    "path": "snapshot/experiments/w22_cost_investability_protocol.json",
+    "bytes": 4509,
+    "sha256": "269c968d37a5c7f2b1c3773a90382e8edffef164cf3fd0cfd7d1c9b4cf5382c1"
+  },
+  {
+    "path": "snapshot/experiments/w24_final_test_protocol.json",
+    "bytes": 14809,
+    "sha256": "3eabb9348da96a56382a5d5704286c705d1618196a7c138a75adde0befa0698c"
+  },
+  {
+    "path": "snapshot/models/__init__.py",
+    "bytes": 1839,
+    "sha256": "35ca17451daef252bb2b96752bedf07e26a3b4b8794bb39e64d2bcf947f0682f"
+  },
+  {
+    "path": "snapshot/models/allocation_costs.py",
+    "bytes": 16949,
+    "sha256": "9e3be4775ba80a897b1dd07913ff461ee2ad30da1bd6e248d77c77e2def9647a"
+  },
+  {
+    "path": "snapshot/models/allocation_policy.py",
+    "bytes": 20981,
+    "sha256": "5612c3e8fa4602888c8507ed3f9bec3aa86374010f431d3465755180e885431d"
+  },
+  {
+    "path": "snapshot/models/anomaly_detector.py",
+    "bytes": 19497,
+    "sha256": "b7e6bb38fcf25b0a08f485c518000b7450899c89c4bea8c734d5230b3b533c87"
+  },
+  {
+    "path": "snapshot/models/crisis_warning_artifact_hash.py",
+    "bytes": 3604,
+    "sha256": "d10e80d7c38ad0b1a12b22bb85b7e1766ff04abd4dca97e052c4c4dea0ea80ce"
+  },
+  {
+    "path": "snapshot/models/crisis_warning_engine.py",
+    "bytes": 48805,
+    "sha256": "deaa82b41c451d3b2774de0f29fac507098bd4b39cc2cc48d07429586b3af006"
+  },
+  {
+    "path": "snapshot/models/factor_models.py",
+    "bytes": 19316,
+    "sha256": "bf6792028f6370d7c85e236c41f27e8302bd547fa216ebc7ad070baf26ec144b"
+  },
+  {
+    "path": "snapshot/models/market_validation.py",
+    "bytes": 3478,
+    "sha256": "f55083027601f65120d725dc41c636ad7bcb8ec2d991401a16c48a98b6ea0045"
+  },
+  {
+    "path": "snapshot/models/ml_diagnostics.py",
+    "bytes": 3552,
+    "sha256": "712ad5a7586eace8c7a14122707d57d960966ff3945355bd3d7a4db68be24c92"
+  },
+  {
+    "path": "snapshot/models/ml_risk_engine.py",
+    "bytes": 29479,
+    "sha256": "8f8282d92451092767e98f4acaa18aaca17b7b85bbbd4335e69f44762fd02eae"
+  },
+  {
+    "path": "snapshot/models/portfolio_opt.py",
+    "bytes": 33722,
+    "sha256": "ceb9fe44386bddada4df1e23041e096a8c5b5ec3edee1d706e0db0772a1c5b7a"
+  },
+  {
+    "path": "snapshot/models/regime_detector.py",
+    "bytes": 22453,
+    "sha256": "71618f534a2b091206b1159a85020062cb5a3efa44abcc296b753d8e08999c8f"
+  },
+  {
+    "path": "snapshot/models/request_validation.py",
+    "bytes": 2506,
+    "sha256": "97ffe4736a0ab65c19cf165bb3c1c03110c055c5a9568541e5b97a58eea129b3"
+  },
+  {
+    "path": "snapshot/models/risk_engine.py",
+    "bytes": 35305,
+    "sha256": "e11ce62ddb72d02e87e8823f555b6dfafcfb137bd933e115210395d18f07feb0"
+  },
+  {
+    "path": "snapshot/models/temporal_validation.py",
+    "bytes": 11967,
+    "sha256": "f683d487f9d7db44a51cd67bc83fcd0743c212031bb351404e6a2a258eaad96d"
+  },
+  {
+    "path": "snapshot/models/xgboost_runtime.py",
+    "bytes": 6347,
+    "sha256": "72a8b51121c7914950e68112868372c25c2de0b2f2cce2ba9667cd13862f51ba"
+  }
+]

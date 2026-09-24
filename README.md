@@ -58,6 +58,7 @@ These commands do not contact a market-data provider, train a model, tune a thre
 | Generated tables and figures | `results/generated/`, `results/figures/` | generator regression tests |
 | Offline entry point | `scripts/run_reproducibility_smoke.sh` | direct execution |
 | Public tests | `tests/` | `python -m pytest -q` |
+| Five-case financial-semantic audit | [audits/mathematics_2026_09_23/](audits/mathematics_2026_09_23/README.md) | `python audits/mathematics_2026_09_23/run_injections.py` |
 
 ## Artifact status
 

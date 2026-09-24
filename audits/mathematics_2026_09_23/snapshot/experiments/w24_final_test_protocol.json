@@ -1,0 +1,349 @@
+{
+  "protocol_version": "w24-final-test-readiness-v1",
+  "protocol_status": "frozen_before_any_w25_locked_test_result",
+  "frozen_at_utc": "2026-08-03T15:28:28Z",
+  "window": "W24",
+  "reviewer_id": "R5.7",
+  "purpose": "Freeze the security-disjoint and out-of-time full-framework test, primary analyses, robustness cuts, and deviation rules before W25 can acquire or evaluate the locked outcomes.",
+  "parent_chain": {
+    "w06_coverage_contract": {
+      "path": "experiments/w25_full_framework_coverage.yaml",
+      "sha256": "7ff7c5ba44c6cd45d706e675dd8b1b01bc0e294600a30fd4f12cb3b0889397ff"
+    },
+    "w13_threshold_protocol": {
+      "path": "experiments/w13_cost_sensitive_threshold_protocol.json",
+      "sha256": "6dc34021931a887f24e77106198a021115225b1ac6de004ff78fe1fd75f00ca4"
+    },
+    "w13_threshold_log": {
+      "path": "paper/resubmission/Access-2026-23664/evidence/w13/threshold_selection_log.json",
+      "sha256": "47b2f9fd6d1b5d3ef938615f15a8e9a5372c3a2d4b552866e235c4b5402f0f65"
+    },
+    "w14_fair_baseline_protocol": {
+      "path": "experiments/w14_matched_global_baseline_protocol.json",
+      "sha256": "2219f94690468ddf0502fa5bbac28763268ffa327183689fbb24e40f403b0372"
+    },
+    "w15_reviewer_baseline_protocol": {
+      "path": "experiments/w15_reviewer_baseline_protocol.json",
+      "sha256": "44dc3232576b7f3532dcc05a9c003f134bd243ce2cad056bf0170e8579883732"
+    },
+    "w15_timestamp_amendment": {
+      "path": "experiments/w15_reviewer_baseline_protocol_v1_1.json",
+      "sha256": "6e838ab1f7a3fbe33721beaa9e4a042a1ba72c233f759dfdb952328d4e136510"
+    },
+    "w20_scientific_parent": {
+      "path": "experiments/w20_component_ablation_protocol.json",
+      "sha256": "89434420ebc742ad9e20a104674dfc1496e17c64eff3ab1bb0a66bfd447b4d48"
+    },
+    "w21_execution_protocol": {
+      "path": "experiments/w21_component_ablation_protocol.json",
+      "sha256": "4f3e8071177f6408690c15918320323b81719aa1dfd897b724fdd30266b6ab21"
+    },
+    "w21_execution_config": {
+      "path": "experiments/w21_component_ablation_execution.yaml",
+      "sha256": "ce7c11e7a88bad323cf2c8a8b1bf5b4448791aecb7e9b13fb688bdf3cac96a43"
+    },
+    "w22_cost_protocol": {
+      "path": "experiments/w22_cost_investability_protocol.json",
+      "sha256": "269c968d37a5c7f2b1c3773a90382e8edffef164cf3fd0cfd7d1c9b4cf5382c1"
+    },
+    "w22_cost_config": {
+      "path": "experiments/w22_cost_execution.yaml",
+      "sha256": "6f8c81ebfa7e14fd88cd2cf1eec9e09fb06d7ae8cf857e926e94001c795b4bca"
+    },
+    "w23_statistics_protocol": {
+      "path": "experiments/w23_dependence_statistics_protocol.json",
+      "sha256": "6dff3d604499e3a0df61da16f965ce19481a5508f56567c7689d8d52d0862742"
+    },
+    "w23_statistics_config": {
+      "path": "experiments/w23_statistics_execution.yaml",
+      "sha256": "e6c2ea6c87da9fab4fd31ab50292a151bf3a7d3e48c18d0c92a9c0e1dcfd0e5d"
+    }
+  },
+  "frozen_artifact_and_templates": {
+    "accepted_h1_artifact": {
+      "directory": "artifacts/crisis_warning/v2/global_h1",
+      "bundle_sha256": "cdb25a3a9919c25fec196832275ca84dc110a9a2bd39b008a3884beb858b12d4",
+      "metadata_path": "artifacts/crisis_warning/v2/global_h1/training_metadata.json",
+      "metadata_sha256": "b91c779c794badd54e8192dc10baf7ba2c538e2b2d9bf80e09628a00e608b959",
+      "feature_schema_path": "artifacts/crisis_warning/v2/global_h1/feature_schema.json",
+      "feature_schema_sha256": "8e90b47d2d1a16524b46937eb8bb8db493d8e53628868ba22965670c57ccb95e",
+      "validation_status": "ok"
+    },
+    "w21_results_template": {
+      "path": "paper/resubmission/Access-2026-23664/evidence/w21/results_table_template.csv",
+      "sha256": "8948830dbbf04cbe27e39e63fec4843099e0c62cb37d0271e44a97f475240b6f",
+      "rows": 11,
+      "must_remain_unpopulated_in_w24": true
+    },
+    "w22_results_template": {
+      "path": "paper/resubmission/Access-2026-23664/evidence/w22/results_table_template.csv",
+      "sha256": "822964a629146a6729c9a31e85978fc32b695aaeb3add35014945331b78a769b",
+      "rows": 33,
+      "required_empty_inference_fields": [
+        "paired_ci_low",
+        "paired_ci_high",
+        "paired_p_value",
+        "adjusted_p_value"
+      ],
+      "must_remain_unpopulated_in_w24": true
+    },
+    "w23_inference_template": {
+      "path": "paper/resubmission/Access-2026-23664/evidence/w23/inference_results_template.csv",
+      "sha256": "b293b093e44f5838cb55fe267fd1b15368349477c79ea21df83fbfe6af69500f",
+      "rows": 11,
+      "must_remain_unpopulated_in_w24": true
+    }
+  },
+  "final_test_panel": {
+    "manifest_path": "experiments/portfolios/zero_overlap_supplement_portfolios.yaml",
+    "manifest_sha256": "6f314fa9fb01ce982cd19cc495ea28dc95eb8195cb69cecbaea43d7c2d195a89",
+    "w06_audit_manifest_path": "paper/resubmission/Access-2026-23664/evidence/w06/strict_external_panel_manifest.csv",
+    "w06_audit_manifest_sha256": "3f9e97434f44284c9bb80e76974c66c52a8ce9891f62042f7d5f0a91fa1261a5",
+    "membership_policy": "immutable_no_post_result_replacement",
+    "markets": ["us", "hk", "cn", "jp", "tw"],
+    "portfolios_per_market": 2,
+    "portfolio_count": 10,
+    "security_isolation": {
+      "required": true,
+      "training_universe_source": "accepted_h1_training_metadata",
+      "zero_overlap_required_for_every_portfolio": true,
+      "failure_action": "abort_before_provider_access"
+    },
+    "temporal_isolation": {
+      "context_start_inclusive": "2025-01-02",
+      "final_decision_start_inclusive": "2026-05-18",
+      "final_decision_end_inclusive": "2026-07-30",
+      "final_outcome_end_inclusive": "2026-07-31",
+      "provider_end_exclusive": "2026-08-01",
+      "latest_h1_artifact_population_date": "2025-12-30",
+      "latest_pre_w24_strict_warning_decision_date": "2026-05-14",
+      "boundary_rule": "The first locked decision date must be later than both the accepted-artifact population and every previously inspected strict-panel decision row; H1 purge and embargo must also pass at the boundary.",
+      "context_use": "Lagged feature, label-threshold, allocation-lookback, and regime-signal construction only; rows before final_decision_start are never scored as W25 outcomes.",
+      "failure_action": "abort_without_shortening_or_shifting_the_locked_window"
+    },
+    "snapshot_policy": {
+      "acquisition_window": "W25_only_after_W24_commit",
+      "provider_contract": "w07-v1",
+      "network_access_in_w24": false,
+      "sandbox_data": false,
+      "canonical_snapshot_hash_before_scoring": true,
+      "immutable_requested_observed_scope_manifest": true,
+      "live_refresh_boundary": "The single W25 acquisition is hashed immediately; later provider revisions cannot replace it within the locked run."
+    }
+  },
+  "warning_analysis": {
+    "accepted_primary_horizon": 1,
+    "h5": {
+      "status": "failed_evidence_final_test_unopened",
+      "eligible_for_w25_execution": false,
+      "reason": "W11 H5 failed the unchanged validation ROC-AUC gate; W24 cannot convert it into an accepted horizon."
+    },
+    "reference": "accepted_v2_h1_frozen_artifact",
+    "fair_comparators": [
+      "xgboost_retrained_comparator",
+      "logistic_regression",
+      "random_forest",
+      "gradient_boosting",
+      "historical_tail_threshold",
+      "historical_var",
+      "historical_es",
+      "garch_1_1",
+      "caviar_sav",
+      "quantile_regression",
+      "temporal_mlp"
+    ],
+    "training_calibration_contract": "Every fitted comparator inherits the W14/W15 matched global H1 training rows, feature/label rules, purge/embargo, exclusions, one pre-metric configuration, and calibration-only isotonic fit.",
+    "stochastic_models_repeated_with_w23_seeds": [
+      "xgboost_retrained_comparator",
+      "random_forest",
+      "gradient_boosting",
+      "temporal_mlp"
+    ],
+    "deterministic_single_execution": [
+      "accepted_v2_h1_frozen_artifact",
+      "logistic_regression",
+      "historical_tail_threshold",
+      "historical_var",
+      "historical_es",
+      "garch_1_1",
+      "caviar_sav",
+      "quantile_regression"
+    ],
+    "repeat_seeds": [20260803, 20260804, 20260805, 20260806, 20260807],
+    "minimum_paired_successes": 4,
+    "threshold": {
+      "value": 0.10074626865671642,
+      "source": "W13_calibration_only",
+      "operator": ">=",
+      "ties": "threshold_inclusive",
+      "reselection_forbidden": true,
+      "legacy_reference": 0.6
+    },
+    "primary_metrics": [
+      "average_precision",
+      "brier_score",
+      "recall_at_frozen_threshold"
+    ],
+    "secondary_metrics": [
+      "roc_auc",
+      "log_loss",
+      "flag_rate_at_frozen_threshold",
+      "top_decile_lift"
+    ],
+    "top_decile_ties": "deterministic_exact_k_by_probability_desc_then_row_id_asc",
+    "primary_inference_reference": "accepted_v2_h1_frozen_artifact"
+  },
+  "allocation_analysis": {
+    "strategies": [
+      "equal_weight",
+      "inverse_volatility",
+      "mean_variance",
+      "prior_only_bl",
+      "smart_policy",
+      "smart_policy_oos_guard"
+    ],
+    "component_reference": "full_stack",
+    "component_variants": [
+      "full_stack",
+      "without_model_view",
+      "fixed_view_uncertainty",
+      "fixed_smart_policy",
+      "guard_disabled",
+      "risk_inputs_neutralized",
+      "regime_input_neutralized",
+      "anomaly_input_neutralized",
+      "fixed_weight_bounds",
+      "fixed_turnover_penalty",
+      "fixed_concentration_penalty"
+    ],
+    "one_override_per_nonreference_variant": true,
+    "rebalance_sessions": 21,
+    "point_in_time_decision_required": true,
+    "gross_net_required": true,
+    "primary_cost_scenario": "base",
+    "cost_scenarios": [
+      {"scenario_id": "low", "one_way_cost_bps": 5.0, "primary": false},
+      {"scenario_id": "base", "one_way_cost_bps": 12.0, "primary": true},
+      {"scenario_id": "high", "one_way_cost_bps": 25.0, "primary": false}
+    ],
+    "investability": "Inherit W22 long-only/full-investment, effective position cap, per-asset trade cap, portfolio turnover cap, point-in-time tradability gate, and hold-and-log rule without change.",
+    "primary_metrics": [
+      "net_mean_log_return",
+      "net_information_ratio"
+    ],
+    "secondary_metrics": [
+      "gross_mean_log_return",
+      "gross_information_ratio",
+      "turnover",
+      "model_score"
+    ],
+    "descriptive_outputs": [
+      "gross_cumulative_return",
+      "net_cumulative_return",
+      "benchmark_cumulative_return",
+      "gross_benchmark_excess_return",
+      "net_benchmark_excess_return",
+      "gross_annualized_return",
+      "net_annualized_return",
+      "annualized_volatility",
+      "max_drawdown",
+      "expected_shortfall",
+      "gross_sharpe",
+      "net_sharpe",
+      "gross_information_ratio",
+      "net_information_ratio",
+      "turnover",
+      "one_way_turnover",
+      "fee_cost",
+      "spread_cost",
+      "slippage_cost",
+      "realized_cost",
+      "model_score"
+    ]
+  },
+  "dependence_aware_statistics": {
+    "protocol": "inherit_W23_without_change",
+    "warning_primary_block_sessions": 20,
+    "allocation_primary_block_sessions": 21,
+    "bootstrap_replicates": 2000,
+    "randomization_replicates": 2000,
+    "confidence_level": 0.95,
+    "primary_correction": "holm_alpha_0.05",
+    "sensitivity_correction": "benjamini_hochberg_q_0.10",
+    "warning_pairing_keys": ["seed", "portfolio_name", "date"],
+    "allocation_pairing_keys": ["portfolio_name", "date", "cost_scenario"],
+    "iid_warning_row_bootstrap": "prohibited",
+    "legacy_19_summary_point_bootstrap": "prohibited",
+    "failed_runs": "retain_without_imputation",
+    "insufficient_inference": "retain_as_not_estimable_with_reason"
+  },
+  "robustness_cuts": {
+    "overall": "all eligible locked rows",
+    "market": ["overall", "us", "hk", "cn", "jp", "tw"],
+    "period": {
+      "labels": ["early", "late"],
+      "assignment": "stable chronological rank split of eligible locked dates into equal-length halves before reading labels, scores, or returns; earlier date receives the extra observation when odd"
+    },
+    "regime": {
+      "labels": ["calm", "normal", "stress"],
+      "signal": "lagged_63_session_benchmark_annualized_volatility",
+      "cutoffs": "W14/W15 matched-global training-role tertiles only",
+      "test_outcomes_used_for_cutoffs": false
+    },
+    "minimum_warning_unique_dates": 40,
+    "minimum_warning_positive_events": 20,
+    "minimum_allocation_portfolios": 2,
+    "minimum_allocation_time_blocks": 8,
+    "insufficient_slice_rule": "retain_planned_row_as_not_estimable_no_slice_removal"
+  },
+  "protocol_deviations": {
+    "allowed_categories": [
+      "provider_row_unavailable_or_market_holiday",
+      "predeclared_w07_provider_fallback",
+      "model_convergence_or_optimizer_failure",
+      "allocation_solver_or_tradability_failure",
+      "predeclared_slice_not_estimable"
+    ],
+    "allowed_handling": "Retain the planned row, failure, skip, provider state, and reason; never impute, substitute a ticker/model, tune a parameter, change a metric, or delete a slice.",
+    "fatal_categories": [
+      "hash_mismatch",
+      "security_overlap",
+      "temporal_boundary_violation",
+      "unfrozen_or_changed_snapshot_after_scoring",
+      "threshold_or_metric_change",
+      "model_family_or_component_variant_change",
+      "cost_scenario_or_robustness_cut_change",
+      "legacy_result_import",
+      "h5_final_test_access"
+    ],
+    "fatal_handling": "Abort W25 before publishing an eligible result package; do not repair the protocol after outcomes are visible.",
+    "post_result_protocol_change": "forbidden"
+  },
+  "required_w25_outputs": [
+    "canonical_snapshot_manifest_and_hashes",
+    "security_and_temporal_isolation_audit",
+    "warning_predictions_metrics_repeats_failures_and_skips",
+    "fair_baseline_training_calibration_and_row_identity_audit",
+    "point_in_time_allocation_decision_and_return_rows",
+    "component_ablation_results_for_all_11_variants",
+    "gross_net_cost_ledger_for_all_3_scenarios",
+    "dependence_aware_intervals_paired_tests_and_adjustments",
+    "overall_market_period_and_regime_slices",
+    "protocol_deviation_log",
+    "run_log_and_complete_result_hash_manifest"
+  ],
+  "scope_boundaries": {
+    "w24_data_access": "development_and_synthetic_only",
+    "w25_locked_full_framework_test": "not_run_in_w24",
+    "h5_final_test": "unopened",
+    "accepted_warning_horizon": "H1_only",
+    "warning_threshold": 0.10074626865671642,
+    "warning_threshold_selected_on": "calibration_only",
+    "legacy_threshold": 0.6,
+    "raw_accepted_h1_calibration_error": "greater_than_0.40",
+    "legacy_allocation_ablation_statistics_admissible": false,
+    "development_or_synthetic_outputs_are_performance_significance_or_causal_evidence": false,
+    "practical_alarm_claim": false,
+    "post_w25_tuning_metric_or_primary_slice_changes": "forbidden"
+  }
+}

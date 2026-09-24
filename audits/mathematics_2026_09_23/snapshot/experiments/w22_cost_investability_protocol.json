@@ -1,0 +1,122 @@
+{
+  "protocol_version": "w22-cost-investability-v1",
+  "frozen_at_utc": "2026-08-03T15:30:00Z",
+  "reviewer_id": "R2.10",
+  "parent_chain": {
+    "w20_scientific_parent": {
+      "path": "experiments/w20_component_ablation_protocol.json",
+      "sha256": "89434420ebc742ad9e20a104674dfc1496e17c64eff3ab1bb0a66bfd447b4d48"
+    },
+    "w21_execution_protocol": {
+      "path": "experiments/w21_component_ablation_protocol.json",
+      "sha256": "4f3e8071177f6408690c15918320323b81719aa1dfd897b724fdd30266b6ab21"
+    },
+    "w21_execution_config": {
+      "path": "experiments/w21_component_ablation_execution.yaml",
+      "sha256": "ce7c11e7a88bad323cf2c8a8b1bf5b4448791aecb7e9b13fb688bdf3cac96a43"
+    },
+    "relationship": "cost_and_investability_execution_child_no_parent_scientific_change"
+  },
+  "rebalancing": {
+    "sessions": 21,
+    "decision_timing": "after_information_cutoff_before_holding_start",
+    "terminal_segment": "allow_shorter_final_holding_block",
+    "holding_weights": "self_financing_drift_between_rebalances"
+  },
+  "turnover": {
+    "reported_measure": "sum_absolute_weight_changes",
+    "formula": "L1_t=sum_i_abs(w_exec_i_t-w_pretrade_i_t)",
+    "cost_base": "one_way_turnover_equals_half_l1",
+    "pretrade_reference": "drifted_end_of_previous_holding_weights",
+    "initial_reference": "committed_manifest_weights",
+    "aggregate": "sum_over_rebalances"
+  },
+  "investability": {
+    "position_rule": "long_only_fully_invested",
+    "short_sales": "prohibited",
+    "configured_position_cap": 0.40,
+    "position_cap_rule": "max(configured_cap,1/n_assets)",
+    "max_trade_weight_per_asset": 0.10,
+    "max_one_way_turnover": 0.25,
+    "tradability_lookback_sessions": 63,
+    "minimum_history_observations": 40,
+    "maximum_missing_fraction": 0.0,
+    "untradable_action": "hold_all_and_log",
+    "liquidity_interpretation": "portfolio_weight_trade_cap_proxy_no_ADV_capacity_claim",
+    "failure_handling": "fail_closed_and_log_skip"
+  },
+  "cost_formula": {
+    "fee": "one_way_turnover*fee_bps/10000",
+    "spread": "one_way_turnover*(quoted_spread_bps/2)/10000",
+    "slippage": "one_way_turnover*slippage_bps/10000",
+    "net_log_return_at_rebalance": "gross_log_return+log(1-total_cost_fraction)",
+    "cost_timing": "deduct_once_at_each_holding_start"
+  },
+  "cost_scenarios": [
+    {
+      "scenario_id": "low",
+      "primary": false,
+      "fee_bps": 0.0,
+      "quoted_spread_bps": 4.0,
+      "slippage_bps": 3.0,
+      "one_way_cost_bps": 5.0,
+      "basis": "lower liquid-instrument sensitivity; not selected from outcomes"
+    },
+    {
+      "scenario_id": "base",
+      "primary": true,
+      "fee_bps": 1.0,
+      "quoted_spread_bps": 10.0,
+      "slippage_bps": 6.0,
+      "one_way_cost_bps": 12.0,
+      "basis": "pre-specified primary liquid-public-instrument assumption; not calibrated on test returns"
+    },
+    {
+      "scenario_id": "high",
+      "primary": false,
+      "fee_bps": 5.0,
+      "quoted_spread_bps": 20.0,
+      "slippage_bps": 10.0,
+      "one_way_cost_bps": 25.0,
+      "basis": "adverse sensitivity retained regardless of relative strategy results"
+    }
+  ],
+  "sensitivity_basis": {
+    "purpose": "bounded_liquid_instrument_sensitivity_not_market_impact_calibration",
+    "range": "5_to_25_bps_one_way",
+    "selection_rule": "freeze_all_three_before_locked_test_and_report_all_three",
+    "limitations": "no_fund_size_volume_or_ADV_inputs_so_no_capacity_claim"
+  },
+  "gross_net_schema": {
+    "gross": "self_financing_log_return_before_explicit_cost",
+    "net": "same_gross_path_less_scenario_costs_at_each_rebalance",
+    "benchmark": "unchanged_gross_benchmark_path",
+    "required_result_fields": [
+      "gross_cumulative_return",
+      "net_cumulative_return",
+      "gross_benchmark_excess_return",
+      "net_benchmark_excess_return",
+      "gross_annualized_return",
+      "net_annualized_return",
+      "gross_sharpe",
+      "net_sharpe",
+      "gross_information_ratio",
+      "net_information_ratio",
+      "turnover",
+      "one_way_turnover",
+      "fee_cost",
+      "spread_cost",
+      "slippage_cost",
+      "realized_cost"
+    ]
+  },
+  "scope_boundaries": {
+    "development_outputs_are_performance_evidence": false,
+    "w25_locked_full_framework_test": "prohibited_in_w22",
+    "legacy_allocation_results_admissible": false,
+    "h5_final_test": "unopened",
+    "accepted_warning_horizon": "H1_only",
+    "warning_threshold_dependency": "none",
+    "w21_parent_results_template": "preserved_unpopulated"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "protocol_id": "mathematics-financial-semantic-injection-v1",
+  "declared_date": "2026-09-23",
+  "scope": "small offline synthetic and frozen-metadata audit, not new market evaluation",
+  "baseline_files_sha256": {
+    "experiments/w24_final_test_protocol.json": "3eabb9348da96a56382a5d5704286c705d1618196a7c138a75adde0befa0698c",
+    "experiments/w22_cost_investability_protocol.json": "269c968d37a5c7f2b1c3773a90382e8edffef164cf3fd0cfd7d1c9b4cf5382c1",
+    "artifacts/crisis_warning/v2/global_h1/training_metadata.json": "b91c779c794badd54e8192dc10baf7ba2c538e2b2d9bf80e09628a00e608b959",
+    "experiments/portfolios/zero_overlap_supplement_portfolios.yaml": "6f314fa9fb01ce982cd19cc495ea28dc95eb8195cb69cecbaea43d7c2d195a89"
+  },
+  "cases": [
+    {
+      "id": "security_role_overlap",
+      "normal": "first frozen strict-panel portfolio with its original tickers",
+      "mutation": "replace its first ticker with a same-market accepted-H1 training ticker",
+      "detector": "experiments.common.enforce_security_disjoint_if_required",
+      "detector_origin": "existing production guard",
+      "expected": "normal allowed; mutation rejected before provider access"
+    },
+    {
+      "id": "future_signal_asof",
+      "normal": "diagnostic as-of equal to the fixed decision cutoff",
+      "mutation": "diagnostic as-of moved to the following business day",
+      "detector": "models.allocation_policy.AllocationPolicyEngine._validate_signal_asof",
+      "detector_origin": "existing production guard",
+      "expected": "normal allowed; future-dated signal rejected"
+    },
+    {
+      "id": "feature_schema_mismatch",
+      "normal": "ordered 14-feature crisis-warning schema",
+      "mutation": "swap two ordered feature names without changing dimensionality",
+      "detector": "models.crisis_warning_engine.CrisisWarningEngine.validate_feature_schema",
+      "detector_origin": "existing production guard",
+      "expected": "normal allowed; swapped schema rejected"
+    },
+    {
+      "id": "split_crossing_label",
+      "normal": "H5 production purge/embargo split on a synthetic business-date series",
+      "mutation": "naive chronological split at the same raw boundary without purge/embargo",
+      "detector": "independent shared-realized-return-position checker in the new harness",
+      "detector_origin": "new audit harness; not a production import guard",
+      "expected": "normal has zero shared label-return positions; mutation has at least one"
+    },
+    {
+      "id": "trade_cost_ledger_mismatch",
+      "normal": "synthetic 21-session cost-aware execution ledger",
+      "mutation": "increase one base-scenario reported realized_cost while leaving fee, spread, slippage and net returns unchanged",
+      "detector": "independent cost-component and net-return identity checker in the new harness",
+      "detector_origin": "new audit harness; not a production post-export guard",
+      "expected": "normal reconciles; mutated ledger is rejected"
+    }
+  ],
+  "decision_rule": "For each case, PASS requires normal accepted and injected error detected. Record each normal false alarm, injected miss, exception and runtime, even if the suite fails.",
+  "reported_metrics": ["normal_false_alarms", "injected_misses", "detected_injections", "per_case_runtime_ms", "total_runtime_ms"],
+  "forbidden": ["H5 final-test opening", "W25-family runner execution", "new market-data access", "predictor retraining", "threshold or allocation tuning", "replacement of historical failed evidence"],
+  "claim_limit": "Five designed examples validate specified checks only. They do not estimate field error prevalence, independent auditor effectiveness, predictive quality, investment value or generalizability."
+}

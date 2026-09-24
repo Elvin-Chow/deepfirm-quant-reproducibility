@@ -1,0 +1,1205 @@
+"""Explainable tail-risk warning engine backed by offline artifacts."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple
+
+import numpy as np
+import pandas as pd
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from data_pipeline import DataQuality, MarketAligner, SmartFetcher
+from models.crisis_warning_artifact_hash import (
+    ARTIFACT_HASH_ALGORITHM,
+    compute_artifact_hash,
+    normalize_artifact_hash_files,
+)
+from models.market_validation import MarketMode
+from models.ml_risk_engine import ForecastHorizon, MLRiskEngine, RiskLevel
+from models.request_validation import normalize_tickers, validate_common_portfolio_contract
+from models.risk_engine import RiskEngine
+from models.xgboost_runtime import (
+    assert_binary_logistic_objective,
+    import_xgboost,
+    predict_binary_probability,
+)
+
+
+TargetMethod = Literal["dynamic_quantile", "fixed_threshold"]
+DriverDirection = Literal["increase_risk", "decrease_risk"]
+CrisisModelHealth = Literal["ok", "degraded", "unavailable"]
+AttributionAlgorithm = Literal[
+    "tree_shap_interventional",
+    "xgboost_native_pred_contribs",
+    "unavailable",
+]
+AttributionOutputScale = Literal[
+    "raw_probability",
+    "raw_margin_log_odds",
+    "unavailable",
+]
+GLOBAL_CRISIS_MARKET_SCOPE = ("us", "hk", "cn", "jp", "tw")
+VALIDATION_STATUS_OK = "ok"
+VALIDATION_STATUS_PARTIAL_MARKET_COVERAGE = "partial_market_coverage"
+VALIDATION_STATUS_DEGRADED_VALIDATION = "degraded_validation"
+CRISIS_VALIDATION_MIN_ROC_AUC = 0.58
+CRISIS_VALIDATION_MIN_POSITIVE_EVENTS = 250
+CRISIS_VALIDATION_MAX_CALIBRATION_ERROR = 0.10
+CRISIS_WARNING_WEAK_ROC_AUC_WARNING = (
+    "Crisis warning ROC AUC is weak; treat the probability as contextual."
+)
+CRISIS_WARNING_WEAK_PR_AUC_WARNING = (
+    "Crisis warning PR AUC is close to the validation base rate; "
+    "treat the probability as contextual."
+)
+CRISIS_WARNING_ELEVATED_CALIBRATION_ERROR_WARNING = (
+    "Crisis warning raw probability calibration error is elevated."
+)
+CRISIS_WARNING_INSUFFICIENT_VALIDATION_EVENTS_WARNING = (
+    "Crisis warning validation tail-event count is below 250."
+)
+
+
+def crisis_validation_quality_warnings(validation_metrics: dict[str, Any]) -> list[str]:
+    warnings: list[str] = []
+
+    def optional_metric(key: str) -> Optional[float]:
+        value = validation_metrics.get(key)
+        if value is None:
+            return None
+        try:
+            numeric = float(value)
+        except Exception:
+            return None
+        if not np.isfinite(numeric):
+            return None
+        return numeric
+
+    validation_positive_events = optional_metric("validation_positive_events")
+    if (
+        validation_positive_events is not None
+        and validation_positive_events < CRISIS_VALIDATION_MIN_POSITIVE_EVENTS
+    ):
+        warnings.append(CRISIS_WARNING_INSUFFICIENT_VALIDATION_EVENTS_WARNING)
+
+    roc_auc = optional_metric("roc_auc")
+    if roc_auc is not None and roc_auc < CRISIS_VALIDATION_MIN_ROC_AUC:
+        warnings.append(CRISIS_WARNING_WEAK_ROC_AUC_WARNING)
+
+    pr_auc = optional_metric("pr_auc")
+    validation_positive_rate = optional_metric("positive_rate")
+    if pr_auc is not None and validation_positive_rate is not None:
+        pr_floor = max(validation_positive_rate * 1.25, validation_positive_rate + 0.01)
+        if pr_auc <= pr_floor:
+            warnings.append(CRISIS_WARNING_WEAK_PR_AUC_WARNING)
+
+    calibration_error = optional_metric("calibration_error")
+    if (
+        calibration_error is not None
+        and calibration_error > CRISIS_VALIDATION_MAX_CALIBRATION_ERROR
+    ):
+        warnings.append(CRISIS_WARNING_ELEVATED_CALIBRATION_ERROR_WARNING)
+    return warnings
+
+
+class CrisisWarningUnavailableError(RuntimeError):
+    """Raised when the requested crisis warning artifact is not ready."""
+
+
+class CrisisWarningRequest(BaseModel):
+    """Request payload for explainable tail-risk warning inference."""
+
+    tickers: List[str] = Field(..., min_length=1)
+    weights: List[float] = Field(default_factory=list)
+    start_date: date
+    end_date: date
+    market: MarketMode = Field(default="us")
+    api_key: Optional[str] = Field(default=None)
+    allow_sandbox_data: bool = Field(default=False)
+    horizon: ForecastHorizon = Field(default=5)
+    tail_quantile: float = Field(default=0.05, ge=0.01, le=0.20)
+    target_method: TargetMethod = Field(default="dynamic_quantile")
+    fixed_threshold: Optional[float] = Field(default=None)
+    explanation_top_n: int = Field(default=5, ge=1, le=10)
+
+    @field_validator("tickers")
+    @classmethod
+    def validate_tickers(cls, tickers: List[str]) -> List[str]:
+        return normalize_tickers(tickers)
+
+    @field_validator("end_date")
+    @classmethod
+    def validate_date_range(cls, end_date: date, info) -> date:
+        start_date = info.data.get("start_date")
+        if start_date and end_date < start_date:
+            raise ValueError("end_date must be on or after start_date")
+        return end_date
+
+    @model_validator(mode="after")
+    def validate_contract(self) -> "CrisisWarningRequest":
+        validate_common_portfolio_contract(self.tickers, self.market, self.weights)
+        if self.target_method == "fixed_threshold":
+            if self.fixed_threshold is None:
+                raise ValueError("fixed_threshold is required when target_method is fixed_threshold")
+            if float(self.fixed_threshold) >= 0.0:
+                raise ValueError("fixed_threshold must be negative")
+        return self
+
+
+class CrisisWarningDriver(BaseModel):
+    """One non-causal feature attribution for the raw warning-model output."""
+
+    feature: str
+    feature_value: float
+    attribution_value: float
+    direction: DriverDirection
+
+
+class CrisisWarningAttribution(BaseModel):
+    """Algorithm, scale, base term, and additivity audit for one explanation."""
+
+    algorithm: AttributionAlgorithm
+    output_scale: AttributionOutputScale
+    base_value: float
+    feature_attribution_sum: float
+    reconstructed_output: float
+    explained_model_output: float
+    additivity_residual: float = Field(ge=0.0)
+    explains_calibrated_probability: bool = Field(default=False)
+    causal_interpretation: bool = Field(default=False)
+
+
+class CrisisWarningDiagnostics(BaseModel):
+    """Operational diagnostics for crisis warning inference."""
+
+    model_health: CrisisModelHealth = Field(default="ok")
+    asof_date: str = Field(default="")
+    training_start: str = Field(default="")
+    training_end: str = Field(default="")
+    n_observations: int = Field(default=0, ge=0)
+    n_training_rows: int = Field(default=0, ge=0)
+    positive_events: int = Field(default=0, ge=0)
+    positive_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    validation_metrics: Dict[str, float] = Field(default_factory=dict)
+    validation_positive_events: int = Field(default=0, ge=0)
+    training_market_scope: List[str] = Field(default_factory=list)
+    required_market_scope: List[str] = Field(default_factory=list)
+    covered_market_scope: List[str] = Field(default_factory=list)
+    skipped_market_scope: List[str] = Field(default_factory=list)
+    is_global_complete: bool = Field(default=False)
+    artifact_hash: str = Field(default="")
+    feature_schema_hash: str = Field(default="")
+    validation_status: str = Field(default="")
+    probability_calibrated: bool = Field(default=False)
+    attribution_fallback_used: bool = Field(default=False)
+    feature_count: int = Field(default=0, ge=0)
+    warnings: List[str] = Field(default_factory=list)
+
+
+class CrisisWarningResult(BaseModel):
+    """Response payload for explainable tail-risk warning inference."""
+
+    crisis_probability: float = Field(ge=0.0, le=1.0)
+    warning_level: RiskLevel
+    model_name: str
+    model_version: str
+    horizon: ForecastHorizon
+    target_definition: str
+    attribution: CrisisWarningAttribution
+    top_risk_drivers: List[CrisisWarningDriver] = Field(default_factory=list)
+    risk_reducers: List[CrisisWarningDriver] = Field(default_factory=list)
+    explanation: str
+    diagnostics: CrisisWarningDiagnostics
+    source: str = Field(default="unknown")
+    source_detail: str = Field(default="unknown")
+    data_warnings: List[str] = Field(default_factory=list)
+    data_quality: DataQuality = Field(default_factory=DataQuality)
+
+
+@dataclass(frozen=True)
+class FeatureAttributionResult:
+    """Internal attribution values plus their explicit public schema."""
+
+    values: np.ndarray
+    schema: CrisisWarningAttribution
+    fallback_used: bool
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CalibrationMapping:
+    """Serializable one-dimensional probability calibration mapping."""
+
+    x_thresholds: np.ndarray
+    y_thresholds: np.ndarray
+
+    @classmethod
+    def from_json(cls, payload: dict[str, Any]) -> Optional["CalibrationMapping"]:
+        if payload.get("method") != "isotonic":
+            return None
+        x_values = np.asarray(payload.get("x_thresholds", []), dtype=float)
+        y_values = np.asarray(payload.get("y_thresholds", []), dtype=float)
+        if x_values.size < 2 or x_values.shape != y_values.shape:
+            return None
+        finite = np.isfinite(x_values) & np.isfinite(y_values)
+        x_values = x_values[finite]
+        y_values = y_values[finite]
+        if x_values.size < 2:
+            return None
+        order = np.argsort(x_values)
+        return cls(x_values[order], np.clip(y_values[order], 0.0, 1.0))
+
+    def predict(self, probability: float) -> float:
+        value = float(np.clip(probability, 0.0, 1.0))
+        calibrated = float(np.interp(value, self.x_thresholds, self.y_thresholds))
+        return float(np.clip(calibrated, 0.0, 1.0))
+
+    def bucket_for(self, probability: float) -> Optional[tuple[float, float, float, float]]:
+        value = float(np.clip(probability, 0.0, 1.0))
+        if self.x_thresholds.size < 2 or self.y_thresholds.size < 2:
+            return None
+        idx = int(np.searchsorted(self.x_thresholds, value, side="right") - 1)
+        idx = max(0, min(idx, self.x_thresholds.size - 2))
+        return (
+            float(self.x_thresholds[idx]),
+            float(self.x_thresholds[idx + 1]),
+            float(self.y_thresholds[idx]),
+            float(self.y_thresholds[idx + 1]),
+        )
+
+    def is_flat_bucket(
+        self,
+        probability: float,
+        min_raw_width: float = 0.05,
+        max_calibrated_delta: float = 0.0025,
+    ) -> bool:
+        bucket = self.bucket_for(probability)
+        if bucket is None:
+            return False
+        x_left, x_right, y_left, y_right = bucket
+        return (
+            (x_right - x_left) >= min_raw_width
+            and abs(y_right - y_left) <= max_calibrated_delta
+        )
+
+
+@dataclass
+class CrisisWarningArtifact:
+    """Loaded model artifact and its supporting metadata."""
+
+    horizon: ForecastHorizon
+    directory: Path
+    model: Any
+    feature_schema: dict[str, Any]
+    metadata: dict[str, Any]
+    background_sample: pd.DataFrame
+    calibration: Optional[CalibrationMapping] = None
+    load_warnings: List[str] = None
+
+    @property
+    def feature_names(self) -> list[str]:
+        names = self.feature_schema.get("feature_names", [])
+        return [str(name) for name in names]
+
+    @property
+    def model_name(self) -> str:
+        return str(self.metadata.get("model_name") or "XGBClassifier")
+
+    @property
+    def model_version(self) -> str:
+        return str(self.metadata.get("model_version") or "crisis-warning-unversioned")
+
+
+class CrisisWarningEngine:
+    """Build crisis warning features, labels, levels, and explanations."""
+
+    model_name = "XGBClassifier"
+    feature_columns = MLRiskEngine.feature_columns
+    schema_version = MLRiskEngine.feature_schema_version
+    min_return_observations = 180
+    min_training_rows = 120
+    min_positive_events = 10
+    threshold_window = 252
+    min_threshold_observations = 60
+    threshold_interpolation = "linear"
+    tail_event_comparator = "strictly_less_than"
+
+    @staticmethod
+    def portfolio_returns(price_df: pd.DataFrame, weights: np.ndarray) -> pd.Series:
+        prices = MLRiskEngine._normalize_price_frame(price_df)
+        asset_returns = RiskEngine.compute_log_returns(prices)
+        asset_returns = RiskEngine.sanitize_returns(asset_returns)
+        if len(asset_returns) < CrisisWarningEngine.min_return_observations:
+            raise ValueError(
+                "at least 180 complete finite return observations are required for crisis warning"
+            )
+        if asset_returns.shape[1] != len(weights):
+            raise ValueError("price data asset count does not match weights")
+        return pd.Series(
+            asset_returns.to_numpy(dtype=float) @ weights,
+            index=asset_returns.index,
+            name="portfolio_return",
+        )
+
+    @staticmethod
+    def future_horizon_returns(portfolio_returns: pd.Series, horizon: ForecastHorizon) -> pd.Series:
+        """Return the sum observed strictly after each decision date, from t+1 to t+h."""
+        future = portfolio_returns.shift(-1).rolling(
+            window=int(horizon),
+            min_periods=int(horizon),
+        ).sum()
+        if horizon > 1:
+            future = future.shift(-(int(horizon) - 1))
+        return future
+
+    @classmethod
+    def dynamic_tail_threshold(
+        cls,
+        portfolio_returns: pd.Series,
+        horizon: ForecastHorizon,
+        tail_quantile: float,
+    ) -> pd.Series:
+        """Trailing quantile of historical h-day returns available by t-1."""
+        historical_horizon_return = portfolio_returns.rolling(
+            window=int(horizon),
+            min_periods=int(horizon),
+        ).sum()
+        return historical_horizon_return.rolling(
+            window=cls.threshold_window,
+            min_periods=cls.min_threshold_observations,
+        ).quantile(
+            float(tail_quantile),
+            interpolation=cls.threshold_interpolation,
+        ).shift(1)
+
+    @classmethod
+    def build_label_frame(
+        cls,
+        features: pd.DataFrame,
+        portfolio_returns: pd.Series,
+        horizon: ForecastHorizon,
+        tail_quantile: float = 0.05,
+        target_method: TargetMethod = "dynamic_quantile",
+        fixed_threshold: Optional[float] = None,
+    ) -> pd.DataFrame:
+        future_returns = cls.future_horizon_returns(portfolio_returns, horizon)
+        if target_method == "fixed_threshold":
+            if fixed_threshold is None or float(fixed_threshold) >= 0.0:
+                raise ValueError("fixed_threshold must be provided as a negative value")
+            threshold = pd.Series(float(fixed_threshold), index=portfolio_returns.index)
+        else:
+            threshold = cls.dynamic_tail_threshold(portfolio_returns, horizon, tail_quantile)
+
+        labels = (future_returns < threshold).astype(float)
+        label_frame = features.copy()
+        label_frame["future_horizon_return"] = future_returns
+        label_frame["tail_threshold"] = threshold
+        label_frame["tail_event"] = labels
+        return label_frame.replace([np.inf, -np.inf], np.nan).dropna(how="any")
+
+    @classmethod
+    def build_training_frame(
+        cls,
+        price_df: pd.DataFrame,
+        weights: np.ndarray,
+        horizon: ForecastHorizon,
+        tail_quantile: float = 0.05,
+        target_method: TargetMethod = "dynamic_quantile",
+        fixed_threshold: Optional[float] = None,
+    ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
+        prices = MLRiskEngine._normalize_price_frame(price_df)
+        portfolio_returns = cls.portfolio_returns(prices, weights)
+        features = MLRiskEngine.build_feature_frame(prices, weights)
+        label_frame = cls.build_label_frame(
+            features=features,
+            portfolio_returns=portfolio_returns,
+            horizon=horizon,
+            tail_quantile=tail_quantile,
+            target_method=target_method,
+            fixed_threshold=fixed_threshold,
+        )
+        cls.validate_training_frame(label_frame)
+        return features, portfolio_returns, label_frame
+
+    @classmethod
+    def validate_training_frame(cls, label_frame: pd.DataFrame) -> None:
+        if len(label_frame) < cls.min_training_rows:
+            raise ValueError("at least 120 complete training rows are required for crisis warning")
+        positives = int(label_frame["tail_event"].sum())
+        negatives = int(len(label_frame) - positives)
+        if positives < cls.min_positive_events:
+            raise ValueError("at least 10 positive tail events are required for crisis warning")
+        if negatives <= 0:
+            raise ValueError("both positive and negative tail-event classes are required")
+
+        feature_values = label_frame[cls.feature_columns].to_numpy(dtype=float)
+        if not np.isfinite(feature_values).all():
+            raise ValueError("training features contain non-finite values")
+
+    @staticmethod
+    def warning_level(probability: float) -> RiskLevel:
+        value = float(np.clip(probability, 0.0, 1.0))
+        if value < 0.35:
+            return "Low"
+        if value < 0.60:
+            return "Medium"
+        if value < 0.80:
+            return "High"
+        return "Extreme"
+
+    @staticmethod
+    def target_definition(
+        horizon: ForecastHorizon,
+        tail_quantile: float,
+        target_method: TargetMethod,
+        fixed_threshold: Optional[float],
+    ) -> str:
+        if target_method == "fixed_threshold":
+            threshold = float(fixed_threshold) if fixed_threshold is not None else 0.0
+            return (
+                f"Future {horizon}D portfolio log return below fixed "
+                f"{threshold:.4f} threshold."
+            )
+        return (
+            f"Sum of portfolio log returns from t+1 through t+{horizon} strictly below "
+            f"the trailing {tail_quantile:.0%} quantile of historical {horizon}D returns "
+            "available by t-1."
+        )
+
+    @staticmethod
+    def validate_feature_schema(feature_names: Sequence[str], expected_names: Sequence[str]) -> None:
+        if list(feature_names) != list(expected_names):
+            raise ValueError("feature schema does not match the crisis warning artifact")
+
+    @staticmethod
+    def _coerce_shap_values(values: Any) -> np.ndarray:
+        if isinstance(values, list):
+            selected = values[-1]
+        else:
+            selected = values
+        arr = np.asarray(selected, dtype=float)
+        if arr.ndim == 3:
+            arr = arr[:, :, -1]
+        if arr.ndim == 2:
+            arr = arr[0]
+        return np.asarray(arr, dtype=float).reshape(-1)
+
+    @staticmethod
+    def _coerce_expected_value(value: Any) -> float:
+        if isinstance(value, (list, tuple, np.ndarray)):
+            arr = np.asarray(value, dtype=float).reshape(-1)
+            if arr.size:
+                return float(arr[-1])
+        return float(value)
+
+    @classmethod
+    def feature_attributions(
+        cls,
+        artifact: CrisisWarningArtifact,
+        latest_features: pd.DataFrame,
+    ) -> FeatureAttributionResult:
+        """Compute an additive attribution without conflating two algorithms.
+
+        ``shap.TreeExplainer`` is reported as TreeSHAP only when that call
+        succeeds and its probability-scale additivity identity is verified.
+        The XGBoost fallback is reported as native ``pred_contribs`` output on
+        the raw margin (log-odds) scale; its final column is the bias term.
+        Neither path explains the subsequent isotonic calibration mapping.
+        """
+        warnings: list[str] = []
+        feature_names = artifact.feature_names
+        background = artifact.background_sample
+        if not background.empty:
+            background = background[feature_names]
+        raw_probability = float(
+            predict_binary_probability(
+                artifact.model,
+                latest_features[feature_names],
+                context=f"crisis attribution H{int(artifact.horizon)}",
+            )[0]
+        )
+
+        try:
+            import shap
+
+            if background.empty:
+                raise ValueError("SHAP background sample is unavailable")
+            explainer = shap.TreeExplainer(
+                artifact.model,
+                data=background,
+                model_output="probability",
+            )
+            shap_raw = explainer.shap_values(latest_features[feature_names])
+            shap_values = cls._coerce_shap_values(shap_raw)
+            expected = cls._coerce_expected_value(explainer.expected_value)
+            if shap_values.shape[0] != len(feature_names) or not np.isfinite(shap_values).all():
+                raise ValueError("SHAP values have an invalid shape")
+            reconstructed = float(expected + shap_values.sum())
+            residual = abs(reconstructed - raw_probability)
+            if residual > 1e-5:
+                raise ValueError(
+                    "TreeSHAP probability-scale additivity check failed: "
+                    f"residual={residual:.6g}"
+                )
+            return FeatureAttributionResult(
+                values=shap_values,
+                schema=CrisisWarningAttribution(
+                    algorithm="tree_shap_interventional",
+                    output_scale="raw_probability",
+                    base_value=float(expected),
+                    feature_attribution_sum=float(shap_values.sum()),
+                    reconstructed_output=reconstructed,
+                    explained_model_output=raw_probability,
+                    additivity_residual=residual,
+                ),
+                fallback_used=False,
+                warnings=tuple(warnings),
+            )
+        except Exception as exc:
+            warnings.append(
+                "TreeSHAP probability attribution unavailable; using native XGBoost "
+                f"pred_contribs on the raw margin scale: {exc}"
+            )
+
+        try:
+            xgb = import_xgboost()
+
+            booster = artifact.model.get_booster()
+            matrix = xgb.DMatrix(latest_features[feature_names], feature_names=feature_names)
+            contribs = booster.predict(matrix, pred_contribs=True)
+            row = np.asarray(contribs, dtype=float)[0]
+            values = row[:-1]
+            base_margin = float(row[-1])
+            if values.shape[0] != len(feature_names) or not np.isfinite(values).all():
+                raise ValueError("native contribution values have an invalid shape")
+            output_margin = float(np.asarray(booster.predict(matrix, output_margin=True)).reshape(-1)[0])
+            reconstructed = float(base_margin + values.sum())
+            residual = abs(reconstructed - output_margin)
+            if residual > 1e-5:
+                raise ValueError(
+                    "native pred_contribs margin-scale additivity check failed: "
+                    f"residual={residual:.6g}"
+                )
+            return FeatureAttributionResult(
+                values=values,
+                schema=CrisisWarningAttribution(
+                    algorithm="xgboost_native_pred_contribs",
+                    output_scale="raw_margin_log_odds",
+                    base_value=base_margin,
+                    feature_attribution_sum=float(values.sum()),
+                    reconstructed_output=reconstructed,
+                    explained_model_output=output_margin,
+                    additivity_residual=residual,
+                ),
+                fallback_used=True,
+                warnings=tuple(warnings),
+            )
+        except Exception as exc:
+            warnings.append(f"Feature attribution is unavailable: {exc}")
+            return FeatureAttributionResult(
+                values=np.zeros(len(feature_names), dtype=float),
+                schema=CrisisWarningAttribution(
+                    algorithm="unavailable",
+                    output_scale="unavailable",
+                    base_value=0.0,
+                    feature_attribution_sum=0.0,
+                    reconstructed_output=0.0,
+                    explained_model_output=raw_probability,
+                    additivity_residual=abs(raw_probability),
+                ),
+                fallback_used=True,
+                warnings=tuple(warnings),
+            )
+
+    @staticmethod
+    def format_drivers(
+        feature_names: Sequence[str],
+        feature_values: Sequence[float],
+        attribution_values: Sequence[float],
+        top_n: int,
+    ) -> tuple[list[CrisisWarningDriver], list[CrisisWarningDriver]]:
+        rows = []
+        for name, value, attribution_value in zip(
+            feature_names,
+            feature_values,
+            attribution_values,
+        ):
+            if not np.isfinite(float(value)) or not np.isfinite(float(attribution_value)):
+                continue
+            rows.append((str(name), float(value), float(attribution_value)))
+
+        positive = sorted(
+            (row for row in rows if row[2] > 0.0),
+            key=lambda row: row[2],
+            reverse=True,
+        )[:top_n]
+        negative = sorted(
+            (row for row in rows if row[2] < 0.0),
+            key=lambda row: row[2],
+        )[:top_n]
+
+        drivers = [
+            CrisisWarningDriver(
+                feature=name,
+                feature_value=value,
+                attribution_value=attribution_value,
+                direction="increase_risk",
+            )
+            for name, value, attribution_value in positive
+        ]
+        reducers = [
+            CrisisWarningDriver(
+                feature=name,
+                feature_value=value,
+                attribution_value=attribution_value,
+                direction="decrease_risk",
+            )
+            for name, value, attribution_value in negative
+        ]
+        return drivers, reducers
+
+    @staticmethod
+    def explanation(probability: float, level: RiskLevel, horizon: ForecastHorizon) -> str:
+        return (
+            f"The model estimates a {probability:.1%} probability that the portfolio enters "
+            f"a {horizon}D tail-risk event. Warning level is {level}. This is a risk alert, "
+            "not a return forecast or trading recommendation."
+        )
+
+
+class CrisisWarningArtifactStore:
+    """Load and validate crisis warning artifacts from disk."""
+
+    def __init__(
+        self,
+        artifact_root: Path | str = Path("artifacts/crisis_warning"),
+        logger: Optional[logging.Logger] = None,
+    ) -> None:
+        self.artifact_root = Path(artifact_root)
+        self.logger = logger or logging.getLogger(__name__)
+        self._artifacts: dict[int, CrisisWarningArtifact] = {}
+        self._errors: dict[int, str] = {}
+
+    @staticmethod
+    def _read_json(path: Path) -> dict[str, Any]:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if not isinstance(payload, dict):
+            raise ValueError(f"{path.name} must contain a JSON object")
+        return payload
+
+    @staticmethod
+    def _sha256_file(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    @staticmethod
+    def _metadata_scope(value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        if isinstance(value, (list, tuple)):
+            return [str(item) for item in value if str(item)]
+        return []
+
+    @classmethod
+    def _normalize_metadata_contract(cls, metadata: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(metadata)
+        if metadata.get("training_domain") != "diversified_global":
+            return normalized
+
+        required_scope = (
+            cls._metadata_scope(metadata.get("required_market_scope"))
+            or cls._metadata_scope(metadata.get("required_training_markets"))
+            or list(GLOBAL_CRISIS_MARKET_SCOPE)
+        )
+        covered_scope = (
+            cls._metadata_scope(metadata.get("covered_market_scope"))
+            or cls._metadata_scope(metadata.get("covered_training_markets"))
+            or cls._metadata_scope(metadata.get("training_market_scope"))
+        )
+        skipped_scope = (
+            cls._metadata_scope(metadata.get("skipped_market_scope"))
+            or cls._metadata_scope(metadata.get("missing_training_markets"))
+            or cls._metadata_scope(metadata.get("incomplete_training_markets"))
+        )
+
+        complete_value = metadata.get("is_global_complete")
+        if complete_value is None:
+            complete_value = metadata.get("global_domain_complete")
+        is_complete = complete_value is True
+
+        if is_complete:
+            covered_scope = covered_scope or list(required_scope)
+            skipped_scope = []
+        else:
+            if not skipped_scope:
+                skipped_scope = [
+                    market for market in required_scope if market not in set(covered_scope)
+                ]
+            if not skipped_scope and required_scope:
+                skipped_scope = list(required_scope)
+
+        validation_status = str(
+            metadata.get("validation_status")
+            or ("ok" if is_complete else VALIDATION_STATUS_PARTIAL_MARKET_COVERAGE)
+        )
+        if not is_complete and validation_status == "ok":
+            validation_status = VALIDATION_STATUS_PARTIAL_MARKET_COVERAGE
+
+        normalized["required_market_scope"] = required_scope
+        normalized["covered_market_scope"] = covered_scope
+        normalized["skipped_market_scope"] = skipped_scope
+        normalized["is_global_complete"] = is_complete
+        normalized["global_domain_complete"] = is_complete
+        normalized["validation_status"] = validation_status
+        return normalized
+
+    @staticmethod
+    def _load_model(path: Path) -> Any:
+        try:
+            xgb = import_xgboost()
+        except Exception as exc:
+            raise RuntimeError("xgboost is required to load crisis warning artifacts") from exc
+        model = xgb.XGBClassifier()
+        model.load_model(str(path))
+        assert_binary_logistic_objective(model, context=f"crisis artifact {path}")
+        return model
+
+    @staticmethod
+    def _validate_artifact_hash(directory: Path, metadata: dict[str, Any]) -> None:
+        expected_hash = str(metadata.get("artifact_hash") or "").strip()
+        if not expected_hash:
+            raise ValueError("artifact hash is missing from artifact metadata")
+
+        expected_algorithm = str(metadata.get("artifact_hash_algorithm") or "").strip().lower()
+        if expected_algorithm != ARTIFACT_HASH_ALGORITHM:
+            raise ValueError("artifact hash algorithm does not match artifact metadata")
+
+        try:
+            expected_files = normalize_artifact_hash_files(metadata.get("artifact_hash_files"))
+            actual_hash, actual_files = compute_artifact_hash(directory)
+        except ValueError as exc:
+            raise ValueError(f"artifact hash manifest is invalid: {exc}") from exc
+
+        if expected_files != actual_files:
+            raise ValueError("artifact hash file manifest does not match artifact files")
+        if expected_hash != actual_hash:
+            raise ValueError("artifact hash does not match artifact files")
+
+    def directory_for_horizon(self, horizon: ForecastHorizon) -> Path:
+        return self.artifact_root / f"global_h{int(horizon)}"
+
+    def load_horizon(self, horizon: ForecastHorizon) -> CrisisWarningArtifact:
+        directory = self.directory_for_horizon(horizon)
+        model_path = directory / "xgb_crisis_model.json"
+        schema_path = directory / "feature_schema.json"
+        metadata_path = directory / "training_metadata.json"
+        background_path = directory / "shap_background_sample.csv"
+        calibration_path = directory / "calibration.json"
+
+        for required_path in (model_path, schema_path, metadata_path):
+            if not required_path.exists():
+                raise FileNotFoundError(f"missing crisis warning artifact file: {required_path}")
+
+        schema = self._read_json(schema_path)
+        metadata = self._normalize_metadata_contract(self._read_json(metadata_path))
+        self._validate_artifact_hash(directory, metadata)
+        expected_schema_hash = str(metadata.get("feature_schema_hash") or "").strip()
+        if expected_schema_hash and expected_schema_hash != self._sha256_file(schema_path):
+            raise ValueError("feature schema hash does not match artifact metadata")
+        feature_names = [str(name) for name in schema.get("feature_names", [])]
+        CrisisWarningEngine.validate_feature_schema(feature_names, CrisisWarningEngine.feature_columns)
+        if int(schema.get("horizon", horizon)) != int(horizon):
+            raise ValueError("artifact horizon does not match its directory")
+        model = self._load_model(model_path)
+
+        warnings: list[str] = []
+        if (
+            metadata.get("training_domain") == "diversified_global"
+            and metadata.get("is_global_complete") is not True
+        ):
+            warnings.append("Diversified global artifact was trained with partial market coverage.")
+        if background_path.exists():
+            background = pd.read_csv(background_path)
+            missing = [name for name in feature_names if name not in background.columns]
+            if missing:
+                warnings.append("SHAP background sample is missing expected feature columns.")
+                background = pd.DataFrame(columns=feature_names)
+            else:
+                background = background[feature_names].apply(pd.to_numeric, errors="coerce")
+                background = background.replace([np.inf, -np.inf], np.nan).dropna(how="any")
+        else:
+            warnings.append("SHAP background sample is unavailable.")
+            background = pd.DataFrame(columns=feature_names)
+
+        calibration = None
+        if calibration_path.exists():
+            calibration = CalibrationMapping.from_json(self._read_json(calibration_path))
+            if calibration is None:
+                warnings.append("Probability calibration artifact could not be read.")
+
+        return CrisisWarningArtifact(
+            horizon=horizon,
+            directory=directory,
+            model=model,
+            feature_schema=schema,
+            metadata=metadata,
+            background_sample=background,
+            calibration=calibration,
+            load_warnings=warnings,
+        )
+
+    def load_available(self, horizons: Iterable[ForecastHorizon] = (1, 5)) -> None:
+        self._artifacts.clear()
+        self._errors.clear()
+        for horizon in horizons:
+            try:
+                self._artifacts[int(horizon)] = self.load_horizon(horizon)
+            except Exception as exc:
+                self._errors[int(horizon)] = str(exc)
+                self.logger.warning(
+                    "crisis warning artifact unavailable horizon=%s error=%s",
+                    horizon,
+                    exc,
+                )
+
+    def get(self, horizon: ForecastHorizon) -> CrisisWarningArtifact:
+        artifact = self._artifacts.get(int(horizon))
+        if artifact is None:
+            detail = self._errors.get(int(horizon), "artifact has not been loaded")
+            raise CrisisWarningUnavailableError(detail)
+        return artifact
+
+    def ensure(self, horizon: ForecastHorizon) -> CrisisWarningArtifact:
+        """Load a horizon artifact on demand and return it."""
+        horizon_key = int(horizon)
+        artifact = self._artifacts.get(horizon_key)
+        if artifact is not None:
+            return artifact
+        try:
+            artifact = self.load_horizon(horizon)
+        except Exception as exc:
+            self._errors[horizon_key] = str(exc)
+            self.logger.warning(
+                "crisis warning artifact unavailable horizon=%s error=%s",
+                horizon,
+                exc,
+            )
+            raise CrisisWarningUnavailableError(str(exc)) from exc
+        self._artifacts[horizon_key] = artifact
+        self._errors.pop(horizon_key, None)
+        return artifact
+
+    def is_ready(self, horizon: ForecastHorizon) -> bool:
+        return int(horizon) in self._artifacts
+
+
+class CrisisWarningService:
+    """Orchestrate stateless crisis warning inference."""
+
+    calibration_bucket_warning = (
+        "Probability calibration is compressed across a wide raw-score range; "
+        "treat this reading as a baseline-calibrated signal."
+    )
+    calibration_base_rate_warning = (
+        "Calibrated probability is close to the training tail-event base rate; "
+        "treat this reading as a weak baseline signal."
+    )
+    weak_roc_auc_warning = CRISIS_WARNING_WEAK_ROC_AUC_WARNING
+    weak_pr_auc_warning = CRISIS_WARNING_WEAK_PR_AUC_WARNING
+    elevated_calibration_error_warning = CRISIS_WARNING_ELEVATED_CALIBRATION_ERROR_WARNING
+    insufficient_validation_events_warning = CRISIS_WARNING_INSUFFICIENT_VALIDATION_EVENTS_WARNING
+
+    def __init__(
+        self,
+        store: Optional[CrisisWarningArtifactStore] = None,
+        aligner: Optional[MarketAligner] = None,
+        logger: Optional[logging.Logger] = None,
+    ) -> None:
+        self.store = store or CrisisWarningArtifactStore(logger=logger)
+        self.aligner = aligner or MarketAligner()
+        self.logger = logger or logging.getLogger(__name__)
+
+    def load_artifacts(self) -> None:
+        self.store.load_available()
+
+    def _artifact_for_horizon(self, horizon: ForecastHorizon) -> CrisisWarningArtifact:
+        try:
+            return self.store.get(horizon)
+        except CrisisWarningUnavailableError as exc:
+            if str(exc) != "artifact has not been loaded":
+                raise
+        ensure = getattr(self.store, "ensure", None)
+        if callable(ensure):
+            return ensure(horizon)
+        raise
+
+    def evaluate(self, request: CrisisWarningRequest) -> CrisisWarningResult:
+        self._artifact_for_horizon(request.horizon)
+        fetcher = SmartFetcher(
+            api_key=request.api_key,
+            allow_sandbox_data=request.allow_sandbox_data,
+        )
+        risk_engine = RiskEngine(fetcher=fetcher, aligner=self.aligner)
+        price_df = risk_engine._fetch_prices(
+            request.tickers,
+            request.start_date,
+            request.end_date,
+            market_mode=request.market,
+        )
+        result = self.evaluate_from_prices(
+            tickers=request.tickers,
+            price_df=price_df,
+            weights=request.weights,
+            horizon=request.horizon,
+            tail_quantile=request.tail_quantile,
+            target_method=request.target_method,
+            fixed_threshold=request.fixed_threshold,
+            explanation_top_n=request.explanation_top_n,
+            source=fetcher.last_source,
+            source_detail=fetcher.last_source_detail,
+            data_warnings=list(fetcher.data_warnings),
+        )
+        result.data_quality = getattr(fetcher, "last_data_quality", DataQuality()).with_warnings(
+            result.data_warnings
+        )
+        return result
+
+    @staticmethod
+    def _metadata_float(metadata: dict[str, Any], key: str, default: float = 0.0) -> float:
+        try:
+            value = float(metadata.get(key, default))
+            if np.isfinite(value):
+                return value
+        except Exception:
+            pass
+        return default
+
+    @staticmethod
+    def _metadata_int(metadata: dict[str, Any], key: str, default: int = 0) -> int:
+        try:
+            return max(int(metadata.get(key, default)), 0)
+        except Exception:
+            return default
+
+    @staticmethod
+    def _clean_metrics(metrics: dict[str, Any]) -> dict[str, float]:
+        clean: dict[str, float] = {}
+        for key, value in metrics.items():
+            try:
+                numeric = float(value)
+            except Exception:
+                continue
+            if np.isfinite(numeric):
+                clean[str(key)] = numeric
+        return clean
+
+    def _validation_quality_warnings(
+        self,
+        validation_metrics: dict[str, float],
+    ) -> list[str]:
+        return crisis_validation_quality_warnings(validation_metrics)
+
+    def _calibration_warnings(
+        self,
+        artifact: CrisisWarningArtifact,
+        raw_probability: float,
+        calibrated_probability: float,
+    ) -> list[str]:
+        if artifact.calibration is None:
+            return []
+        warnings: list[str] = []
+        if artifact.calibration.is_flat_bucket(raw_probability):
+            warnings.append(self.calibration_bucket_warning)
+
+        positive_rate = self._metadata_float(artifact.metadata, "positive_rate", default=np.nan)
+        if (
+            np.isfinite(positive_rate)
+            and abs(float(calibrated_probability) - positive_rate) <= 0.01
+        ):
+            warnings.append(self.calibration_base_rate_warning)
+        return warnings
+
+    def _diagnostics(
+        self,
+        artifact: CrisisWarningArtifact,
+        latest_features: pd.DataFrame,
+        attribution_fallback_used: bool,
+        warnings: Sequence[str],
+    ) -> CrisisWarningDiagnostics:
+        metadata = artifact.metadata
+        metadata_warnings = [str(item) for item in metadata.get("warnings", []) or []]
+        validation_metrics = self._clean_metrics(metadata.get("validation_metrics", {}) or {})
+        if (
+            "validation_positive_events" not in validation_metrics
+            and "validation_positive_events" in metadata
+        ):
+            validation_metrics["validation_positive_events"] = float(
+                self._metadata_int(metadata, "validation_positive_events")
+            )
+        validation_warnings = self._validation_quality_warnings(validation_metrics)
+        validation_status = str(metadata.get("validation_status") or "").strip().lower()
+        if validation_status and validation_status != VALIDATION_STATUS_OK:
+            validation_warnings.append(
+                f"Crisis warning validation status is {validation_status}."
+            )
+        all_warnings = list(
+            dict.fromkeys(
+                [
+                    *metadata_warnings,
+                    *(artifact.load_warnings or []),
+                    *validation_warnings,
+                    *warnings,
+                ]
+            )
+        )
+        model_health: CrisisModelHealth = "degraded" if all_warnings else "ok"
+        if str(metadata.get("model_health", "")).lower() in {"degraded", "unavailable"}:
+            model_health = "degraded"
+
+        asof = ""
+        if not latest_features.empty:
+            asof = pd.Timestamp(latest_features.index[-1]).date().isoformat()
+        validation_positive_events = self._metadata_int(
+            validation_metrics,
+            "validation_positive_events",
+        )
+        training_market_scope = CrisisWarningArtifactStore._metadata_scope(
+            metadata.get("training_market_scope")
+        )
+        if not training_market_scope:
+            training_market_scope = CrisisWarningArtifactStore._metadata_scope(
+                metadata.get("covered_market_scope")
+            )
+
+        return CrisisWarningDiagnostics(
+            model_health=model_health,
+            asof_date=asof,
+            training_start=str(metadata.get("training_start") or ""),
+            training_end=str(metadata.get("training_end") or ""),
+            n_observations=self._metadata_int(metadata, "n_observations"),
+            n_training_rows=self._metadata_int(metadata, "n_training_rows"),
+            positive_events=self._metadata_int(metadata, "positive_events"),
+            positive_rate=self._metadata_float(metadata, "positive_rate"),
+            validation_metrics=validation_metrics,
+            validation_positive_events=validation_positive_events,
+            training_market_scope=training_market_scope,
+            required_market_scope=CrisisWarningArtifactStore._metadata_scope(
+                metadata.get("required_market_scope")
+            ),
+            covered_market_scope=CrisisWarningArtifactStore._metadata_scope(
+                metadata.get("covered_market_scope")
+            ),
+            skipped_market_scope=CrisisWarningArtifactStore._metadata_scope(
+                metadata.get("skipped_market_scope")
+            ),
+            is_global_complete=metadata.get("is_global_complete") is True,
+            artifact_hash=str(metadata.get("artifact_hash") or ""),
+            feature_schema_hash=str(metadata.get("feature_schema_hash") or ""),
+            validation_status=validation_status,
+            probability_calibrated=artifact.calibration is not None,
+            attribution_fallback_used=bool(attribution_fallback_used),
+            feature_count=len(artifact.feature_names),
+            warnings=all_warnings,
+        )
+
+    def evaluate_from_prices(
+        self,
+        tickers: Sequence[str],
+        price_df: pd.DataFrame,
+        weights: Sequence[float],
+        horizon: ForecastHorizon = 5,
+        tail_quantile: float = 0.05,
+        target_method: TargetMethod = "dynamic_quantile",
+        fixed_threshold: Optional[float] = None,
+        explanation_top_n: int = 5,
+        source: str = "unknown",
+        source_detail: str = "unknown",
+        data_warnings: Optional[Sequence[str]] = None,
+    ) -> CrisisWarningResult:
+        artifact = self._artifact_for_horizon(horizon)
+        n_assets = len(tickers)
+        normalized_weights = RiskEngine._normalize_weights(list(weights), n_assets)
+        prices = MLRiskEngine._normalize_price_frame(price_df)
+        features = MLRiskEngine.build_feature_frame(prices, normalized_weights)
+        feature_names = artifact.feature_names
+        CrisisWarningEngine.validate_feature_schema(feature_names, list(features.columns))
+
+        latest_features = features.iloc[[-1]].replace([np.inf, -np.inf], np.nan)
+        if latest_features.isna().any().any():
+            raise ValueError("latest crisis warning feature row contains non-finite values")
+        latest_features = latest_features[feature_names]
+
+        raw_probability = float(
+            predict_binary_probability(
+                artifact.model,
+                latest_features,
+                context=f"crisis warning inference H{int(horizon)}",
+            )[0]
+        )
+        probability = (
+            artifact.calibration.predict(raw_probability)
+            if artifact.calibration is not None
+            else raw_probability
+        )
+        probability = float(np.clip(probability, 0.0, 1.0))
+        calibration_warnings = self._calibration_warnings(
+            artifact=artifact,
+            raw_probability=raw_probability,
+            calibrated_probability=probability,
+        )
+        level = CrisisWarningEngine.warning_level(probability)
+
+        attribution = CrisisWarningEngine.feature_attributions(
+            artifact,
+            latest_features,
+        )
+        drivers, reducers = CrisisWarningEngine.format_drivers(
+            feature_names=feature_names,
+            feature_values=latest_features.iloc[0].to_numpy(dtype=float),
+            attribution_values=attribution.values,
+            top_n=int(explanation_top_n),
+        )
+        diagnostics = self._diagnostics(
+            artifact=artifact,
+            latest_features=latest_features,
+            attribution_fallback_used=attribution.fallback_used,
+            warnings=[*calibration_warnings, *attribution.warnings],
+        )
+
+        target_definition = str(artifact.metadata.get("target_definition") or "") or CrisisWarningEngine.target_definition(
+            horizon=horizon,
+            tail_quantile=tail_quantile,
+            target_method=target_method,
+            fixed_threshold=fixed_threshold,
+        )
+
+        return CrisisWarningResult(
+            crisis_probability=probability,
+            warning_level=level,
+            model_name=artifact.model_name,
+            model_version=artifact.model_version,
+            horizon=horizon,
+            target_definition=target_definition,
+            attribution=attribution.schema,
+            top_risk_drivers=drivers,
+            risk_reducers=reducers,
+            explanation=CrisisWarningEngine.explanation(probability, level, horizon),
+            diagnostics=diagnostics,
+            source=source,
+            source_detail=source_detail,
+            data_warnings=list(data_warnings or []),
+            data_quality=DataQuality(
+                provider_chain=[] if source == "unknown" else [source],
+                warnings=list(data_warnings or []),
+            ),
+        )
