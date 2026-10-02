@@ -1,4 +1,18 @@
-# DeepFirm-Quant reproducibility artifact
+# DeepFirm-Quant historical reproducibility repository
+
+## Current repository
+
+The evaluation package, financial-semantic audit, reproducibility documentation, original Git history, and original evaluation baseline are consolidated at:
+
+**https://github.com/Elvin-Chow/deepfirm-quant-financial-semantic-audit**
+
+Current manuscript: **Executable Financial-Semantic Audits for Tail-Risk Warning and Bayesian Portfolio Evaluation** (unpublished; prepared for submission to *Computational Economics*).
+
+Use the consolidated repository for current code, instructions, and citations. This URL is retained as a historical migration entry. The original code, results, commits, and tag remain preserved. The documentation below describes the earlier package.
+
+---
+
+## Historical package documentation
 
 This repository contains the public reproduction package for the IEEE Access manuscript "An Auditable Explainable AI Framework for Multi-Market Tail-Risk Warning and Leakage-Guarded Bayesian Portfolio Allocation."
 
